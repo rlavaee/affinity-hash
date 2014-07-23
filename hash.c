@@ -103,7 +103,7 @@ void expand_table(struct st_table *tablep){
     entryp->nextp += entriesp_difference;
     entryp->backp += entriesp_difference;
     entryp->forep += entriesp_difference;
-    entryp = entryp->nextp;
+    entryp = entryp->forep;
   }
 
   /* Update pointers in binspp. */
