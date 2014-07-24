@@ -39,9 +39,7 @@ typedef long object;
   BIN_FROM_ENTRYP(tablep, entryp) = entryp;          \
 } while(0)
 
-#define DEL_FROM_BIN_LIST(tablep, bin_idx, entryp) do {   \
-  /* Do Something. */ ; \
-} while(0)
+#define DEL_FROM_BIN_LIST(tablep, bin_idx, entryp) del_from_bin_list(tablep, bin_idx, entryp)
 
 struct st_entry {
   long hash;
@@ -133,6 +131,21 @@ void expand_table(struct st_table *tablep){
     }
   }
 }
+
+// void del_from_bin_list(struct st_table *tablep, int bin_idx, struct st_entry *entryp) {
+//   struct st_entry *entryp_moving = BIN_FROM_IDX(tablep, bin_idx);
+
+//   if (entryp_moving == entryp) {
+//     BIN_FROM_IDX(tablep, bin_idx) = entryp->nextp;
+//   } else {
+//     while(entryp_moving != NULL && entryp_moving->nextp != entryp) {
+//       entryp_moving = entryp_moving->nextp;
+//     }
+//     if(entryp != NULL && entryp->nextp != NULL) {
+//       entryp->nextp = entryp->nextp->nextp;
+//     }
+//   }
+// }
 
 /*------------------*/
 
