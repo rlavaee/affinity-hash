@@ -31,9 +31,11 @@ static char * test_entry() {
 }
 
 static char * test_table() {
-  struct st_table table;
+  struct st_table *tablep = new_tablep();
   object x = 4;
-  set(&table, 3, &x);
+  set(tablep, 3, &x);
+  mu_assert("Get didn't work.", *get(tablep, 3) == 4);
+
 
   return 0;
 }
