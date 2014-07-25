@@ -28,7 +28,7 @@ typedef long object;
 } while(0)
 
 /* Removes from list, but leaves data there. */
-#define DEL_FROM_TABLE_LIST(tablep, entryp) do {                            \
+#define DEL_FROM_TABLE_LIST(tablep, entryp) do {                         \
   if ((entryp)->back != NULL) { (entryp)->back->fore = (entryp)->fore; } \
   if ((entryp)->fore != NULL) { (entryp)->fore->back = (entryp)->back; } \
 } while(0)
@@ -72,6 +72,21 @@ struct st_table * new_table() {
 
 long hash_func(object key) {
   return key;
+}
+
+void del_from_bin_list(struct st_table *tablep, long bin_idx, struct st_entry *entryp) {
+  struct st_entry *entryp_moving = BIN_FROM_IDX(tablep, bin_idx);
+
+  if (entryp_moving == entryp) {
+    BIN_FROM_IDX(tablep, bin_idx) = entryp->nextp;
+  } else {
+    while (entryp_moving != NULL && entryp_moving->nextp != entryp) {
+      entryp_moving = entryp_moving->nextp;
+    }
+    if (entryp != NULL && entryp->nextp != NULL) {
+      entryp->nextp = entryp->nextp->nextp;
+    }
+  }
 }
 
 /* Expand bins array, expand entries allocation, and rehash. */
@@ -132,21 +147,6 @@ void expand_table(struct st_table *tablep){
   }
 }
 
-// void del_from_bin_list(struct st_table *tablep, int bin_idx, struct st_entry *entryp) {
-//   struct st_entry *entryp_moving = BIN_FROM_IDX(tablep, bin_idx);
-
-//   if (entryp_moving == entryp) {
-//     BIN_FROM_IDX(tablep, bin_idx) = entryp->nextp;
-//   } else {
-//     while(entryp_moving != NULL && entryp_moving->nextp != entryp) {
-//       entryp_moving = entryp_moving->nextp;
-//     }
-//     if(entryp != NULL && entryp->nextp != NULL) {
-//       entryp->nextp = entryp->nextp->nextp;
-//     }
-//   }
-// }
-
 /*------------------*/
 
 object* get(struct st_table *tablep, object key) {
@@ -161,7 +161,7 @@ object* get(struct st_table *tablep, object key) {
 }
 
 void set(struct st_table *tablep, object key, object *valuep) {
-  if(tablep->num_entries >= tablep->num_entries) 
+  if(tablep->num_entries >= tablep->num_bins) 
     expand_table(tablep);
 
   struct st_entry *entryp = &(tablep->entriesp[tablep->num_entries++]);

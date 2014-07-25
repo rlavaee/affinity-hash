@@ -9,6 +9,35 @@ int tests_run = 0;
 int foo = 7;
 int bar = 4;
 
+static char * test_entry() {
+  struct st_entry entry1;
+  struct st_entry entry2;
+
+  entry1.key = 1;
+  object x1 = 11;
+  entry1.valuep = &x1;
+  entry1.nextp = &entry2;
+  entry1.backp = &entry2;
+  entry1.forep = NULL;
+
+  entry2.key = 2;
+  object x2 = 22;
+  entry2.valuep = &x1;
+  entry2.nextp = &entry1;
+  entry2.backp = NULL;
+  entry2.forep = &entry1;
+
+  return 0;
+}
+
+static char * test_table() {
+  struct st_table table;
+  object x = 4;
+  set(&table, 3, &x);
+
+  return 0;
+}
+
 static char * test_foo() {
   mu_assert("error, foo != 7", foo == 7);
   return 0;
@@ -20,8 +49,8 @@ static char * test_bar() {
 }
 
 static char * all_tests() {
-  mu_run_test(test_foo);
-  mu_run_test(test_bar);
+  mu_run_test(test_entry);
+  mu_run_test(test_table);
   return 0;
 }
 
