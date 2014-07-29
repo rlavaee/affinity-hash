@@ -14,33 +14,6 @@ typedef long object;
 #define BIN_FROM_KEY(tablep, key)       tablep->binspp[BIN_IDX_FROM_KEY(tablep, key)      ]
 #define BIN_FROM_IDX(tablep, idx)       tablep->binspp[idx                                ]
 
-/* List Management */
-// Need to include edge cases.
-// #define ADD_TO_TABLE_LIST(tablep, entryp) do { \
-//   if (tablep->headp == NULL) {                 \
-//     tablep->headp = entryp;                    \
-//     entryp->backp = entryp->forep = NULL;      \
-//   } else {                                     \
-//     (tablep)->tailp->forep = (entryp);         \
-//     (entryp)->backp = (tablep)->tailp;         \
-//     (tablep)->tailp = (entryp);                \
-//   }                                            \
-// } while(0)
-
-/* Removes from list, but leaves data there. */
-// #define DEL_FROM_TABLE_LIST(tablep, entryp) do {                         \
-//   if ((entryp)->backp != NULL) { (entryp)->backp->forep = (entryp)->forep; } \
-//   if ((entryp)->forep != NULL) { (entryp)->forep->backp = (entryp)->backp; } \
-// } while(0)
-
-/* Memory must be zeroed PRIOR to calling this! */
-// #define ADD_TO_BIN_LIST(tablep, entryp) do {         \
-//   (entryp)->nextp = BIN_FROM_ENTRYP(tablep, entryp); \
-//   BIN_FROM_ENTRYP(tablep, entryp) = entryp;          \
-// } while(0)
-
-// #define DEL_FROM_BIN_LIST(tablep, bin_idx, entryp) del_from_bin_list(tablep, bin_idx, entryp)
-
 struct st_entry {
   long hash;
   object key;
@@ -121,53 +94,67 @@ void del_from_bin_list(struct st_table *tablep, long bin_idx, struct st_entry *e
   }
 }
 
+void free_table(struct st_table *tablep) {
+  free(tablep->entriesp);
+  tablep->entriesp = NULL;
+  free(tablep->binspp);
+  tablep->binspp = NULL;
+}
+
 /* Expand bins array, expand entries allocation, and rehash. */
 void expand_table(struct st_table *tablep){
   int i;
   struct st_entry *entryp;
   struct st_entry *old_entriesp, *new_entriesp;
   int entriesp_difference;
-  size_t old_num_entries, new_num_entries;
+  size_t old_num_bins, new_num_bins;
 
   /* Note old and new number of entries. */
-  old_num_entries = tablep->num_entries;
-  new_num_entries = tablep->num_entries * EXPAND_FACTOR;
-  tablep->num_entries = new_num_entries;
+  old_num_bins = tablep->num_bins;
+  new_num_bins = tablep->num_bins * EXPAND_FACTOR;
+  tablep->num_bins = new_num_bins;
 
   /* Note old and new entriesp location, and difference. */
   old_entriesp = tablep->entriesp;
-  tablep->entriesp = realloc(tablep->entriesp, new_num_entries);
+  tablep->entriesp = realloc(tablep->entriesp,
+                             new_num_bins * sizeof(struct st_entry));
   new_entriesp = tablep->entriesp;
   entriesp_difference = new_entriesp - old_entriesp;
 
   /* Traverse table's entry list and update all the pointers. */
-  tablep->headp += entriesp_difference;
-  tablep->tailp += entriesp_difference;
+  if (tablep->headp != NULL)
+    tablep->headp += entriesp_difference;
+  if (tablep->tailp != NULL)
+    tablep->tailp += entriesp_difference;
   entryp = tablep->headp;
   while (entryp != NULL) {
-    entryp->nextp += entriesp_difference;
-    entryp->backp += entriesp_difference;
-    entryp->forep += entriesp_difference;
+    if (entryp->nextp != NULL)
+      entryp->nextp += entriesp_difference;
+    if (entryp->backp != NULL)
+      entryp->backp += entriesp_difference;
+    if (entryp->forep != NULL)
+      entryp->forep += entriesp_difference;
     entryp = entryp->forep;
   }
 
   /* Update pointers in binspp. */
-  for (i = 0; i < old_num_entries; i++) {
+  for (i = 0; i < old_num_bins; i++) {
     if (tablep->binspp[i] != NULL)
       tablep->binspp[i] += entriesp_difference;
   }
 
   /* Realloc for binspp. */
-  tablep->binspp = realloc(tablep->binspp, new_num_entries);
+  tablep->binspp = realloc(tablep->binspp,
+                           new_num_bins * sizeof(struct st_entry*));
 
   /* NULLify the new bins. */
-  for (i = old_num_entries; i < new_num_entries; i++) {
+  for (i = old_num_bins; i < new_num_bins; i++) {
     tablep->binspp[i] = NULL;
   }
 
   /* For each bin, for each entry, move to appropriate bin
      if not already in it. */
-  for (i = 0; i < tablep->num_entries; i++) {
+  for (i = 0; i < tablep->num_bins; i++) {
     entryp = tablep->binspp[i];
     while (entryp != NULL) {
       if (BIN_IDX_FROM_ENTRYP(tablep, entryp) != i) {
@@ -197,6 +184,8 @@ void set(struct st_table *tablep, object key, object *valuep) {
     expand_table(tablep);
 
   struct st_entry *entryp = &(tablep->entriesp[tablep->num_entries++]);
+  entryp->key = key;
+  entryp->hash = hash_func(key);
   entryp->valuep = valuep;
 
   add_to_table_list(tablep, entryp);
@@ -205,12 +194,10 @@ void set(struct st_table *tablep, object key, object *valuep) {
 
 void delete(struct st_table *tablep, object key) {
   struct st_entry *entryp = BIN_FROM_KEY(tablep, key);
-  while(entryp->nextp->key != key && entryp->nextp->key != NULL) {
-    entryp = entryp->nextp;
-  }
-  if (entryp->nextp != NULL) {
-    entryp->nextp = entryp->nextp->nextp;
-  }
+
+  del_from_table_list(tablep, entryp);
+  del_from_bin_list(tablep, BIN_IDX_FROM_ENTRYP(tablep, entryp), entryp);
+
   return;
 }
 
@@ -231,3 +218,44 @@ struct st_entry* affinity_rehash(long *hashesp, size_t len) {
 
 
 
+
+
+/* Code Graveyard */
+/* List Management */
+// Need to include edge cases.
+// #define ADD_TO_TABLE_LIST(tablep, entryp) do { \
+//   if (tablep->headp == NULL) {                 \
+//     tablep->headp = entryp;                    \
+//     entryp->backp = entryp->forep = NULL;      \
+//   } else {                                     \
+//     (tablep)->tailp->forep = (entryp);         \
+//     (entryp)->backp = (tablep)->tailp;         \
+//     (tablep)->tailp = (entryp);                \
+//   }                                            \
+// } while(0)
+
+/* Removes from list, but leaves data there. */
+// #define DEL_FROM_TABLE_LIST(tablep, entryp) do {                         \
+//   if ((entryp)->backp != NULL) { (entryp)->backp->forep = (entryp)->forep; } \
+//   if ((entryp)->forep != NULL) { (entryp)->forep->backp = (entryp)->backp; } \
+// } while(0)
+
+/* Memory must be zeroed PRIOR to calling this! */
+// #define ADD_TO_BIN_LIST(tablep, entryp) do {         \
+//   (entryp)->nextp = BIN_FROM_ENTRYP(tablep, entryp); \
+//   BIN_FROM_ENTRYP(tablep, entryp) = entryp;          \
+// } while(0)
+
+// #define DEL_FROM_BIN_LIST(tablep, bin_idx, entryp) del_from_bin_list(tablep, bin_idx, entryp)
+
+// void delete(struct st_table *tablep, object key) {
+//   struct st_entry *entryp = BIN_FROM_KEY(tablep, key);
+
+//   while(entryp->nextp->key != key && entryp->nextp->key != NULL) {
+//     entryp = entryp->nextp;
+//   }
+//   if (entryp->nextp != NULL) {
+//     entryp->nextp = entryp->nextp->nextp;
+//   }
+//   return;
+// }
