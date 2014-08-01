@@ -28,9 +28,10 @@ static char * test_entry() {
   return 0;
 }
 
-static char * test_add_delete() {
+static char * test_set_delete() {
   struct st_table *tablep = new_tablep();
 
+  /* Test set() and get(). */
   object x = 2;
   set(tablep, 1, &x);
 
@@ -43,6 +44,7 @@ static char * test_add_delete() {
   mu_assert("get(tablep, 1) didn't work.", *result1 == 2);
   mu_assert("get(tablep, 2) didn't work.", *result2 == 4);
 
+  /* Test delete(). */
   delete(tablep, 1);
   object *result3 = get(tablep, 1);
 
@@ -89,9 +91,11 @@ static char * test_expand_table_2() {
 
   object *xs = malloc((num_bins1+1) * sizeof(object));
 
-  for (i = 0; i <= num_bins1; i++) {
-    xs[i] = 2*i;
-    set(tablep, i, &xs[i]);
+  object x = 1;
+
+  for (i = 0; i < 2 * num_bins1; i++) {
+    // xs[i] = 2*i;
+    set(tablep, i, &x);
   }
 
   mu_assert("num_bins not correct",
@@ -102,7 +106,7 @@ static char * test_expand_table_2() {
 
 static char * all_tests() {
   mu_run_test(test_entry);
-  mu_run_test(test_add_delete);
+  mu_run_test(test_set_delete);
   mu_run_test(test_expand_table_1);
   mu_run_test(test_expand_table_2);
 

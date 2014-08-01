@@ -1,6 +1,6 @@
 #include <stdlib.h>
 
-#define INITIAL_SIZE 8 // size will be same as num_bins
+#define INITIAL_SIZE 16 // size will be same as num_bins
 #define EXPAND_FACTOR 2
 typedef long object;
 
@@ -99,6 +99,7 @@ void free_table(struct st_table *tablep) {
   tablep->entriesp = NULL;
   free(tablep->binspp);
   tablep->binspp = NULL;
+  // free(tablep);???
 }
 
 /* Expand bins array, expand entries allocation, and rehash. */
@@ -114,7 +115,8 @@ void expand_table(struct st_table *tablep){
   new_num_bins = tablep->num_bins * EXPAND_FACTOR;
   tablep->num_bins = new_num_bins;
 
-  /* Note old and new entriesp location, and difference. */
+  /* Realloc the entries.
+     Note old and new entriesp location, and difference. */
   old_entriesp = tablep->entriesp;
   tablep->entriesp = realloc(tablep->entriesp,
                              new_num_bins * sizeof(struct st_entry));
@@ -123,12 +125,14 @@ void expand_table(struct st_table *tablep){
 
   /* Traverse table's entry list and update all the pointers. */
   if (tablep->headp != NULL)
-    tablep->headp += entriesp_difference;
+    tablep->headp += entriesp_difference; //Problem arises here. IDK why.
   if (tablep->tailp != NULL)
     tablep->tailp += entriesp_difference;
   entryp = tablep->headp;
   while (entryp != NULL) {
     if (entryp->nextp != NULL)
+      //Problem here. entryp->nextp is causing segfault.
+      //entryp->nextp is 0xa on first run through loop.
       entryp->nextp += entriesp_difference;
     if (entryp->backp != NULL)
       entryp->backp += entriesp_difference;
