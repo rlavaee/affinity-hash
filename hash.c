@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <assert.h>
 
 #define INITIAL_SIZE 16 // size will be same as num_bins
 #define EXPAND_FACTOR 2
@@ -35,12 +36,20 @@ struct st_table {
 
 struct st_table* new_tablep() {
   struct st_table *tablep = malloc(sizeof(struct st_table));
+  size_t i;
 
   tablep->entriesp = malloc(INITIAL_SIZE * sizeof(struct st_entry));
   tablep->binspp = calloc(INITIAL_SIZE, sizeof(struct st_entry*));
 
   tablep->num_entries = 0;
   tablep->num_bins = INITIAL_SIZE;
+
+  /* NULLify the new bins. */
+  if (NULL != 0) {
+    for (i = 0; i < tablep->num_bins; i++) {
+      tablep->binspp[i] = NULL;
+    }
+  }
 
   tablep->headp = tablep->tailp = NULL;
   return tablep;
@@ -64,11 +73,16 @@ void add_to_table_list(struct st_table *tablep, struct st_entry *entryp) {
 } 
 
 /* Remove from table's list, but leave data there. */
-void del_from_table_list(struct st_table *tablep, struct st_entry *entryp) {                         \
+void del_from_table_list(struct st_table *tablep, struct st_entry *entryp) {
+  // Can optimize these conditionals.
   if (entryp->backp != NULL)
     entryp->backp->forep = entryp->forep;
   if (entryp->forep != NULL)
     entryp->forep->backp = entryp->backp;
+  if (entryp == tablep->headp)
+    tablep->headp = entryp->forep; //Should be NULL
+  if (entryp == tablep->tailp)
+    tablep->tailp = entryp->nextp; //Should be NULL
 }
 
 /* Add entryp to the appropriate bin's list.
@@ -79,19 +93,29 @@ void add_to_bin_list(struct st_table *tablep, struct st_entry *entryp) {
 }
 
 /* Remove entryp from the indicated bin's list. */
-void del_from_bin_list(struct st_table *tablep, long bin_idx, struct st_entry *entryp) {
+struct st_entry * del_from_bin_list(struct st_table *tablep, long bin_idx, struct st_entry *entryp) {
+  struct st_entry *next_entryp = entryp->nextp;
   struct st_entry *entryp_moving = BIN_FROM_IDX(tablep, bin_idx);
+
+  if (entryp_moving == NULL){
+    printf("Problem 1: see code\n");
+    exit(0);
+  }
 
   if (entryp_moving == entryp) {
     BIN_FROM_IDX(tablep, bin_idx) = entryp->nextp;
-  } else {
-    while (entryp_moving != NULL && entryp_moving->nextp != entryp) {
-      entryp_moving = entryp_moving->nextp;
-    }
-    if (entryp != NULL && entryp->nextp != NULL) {
-      entryp->nextp = entryp->nextp->nextp;
-    }
+    return next_entryp;
   }
+
+  while (entryp_moving->nextp != NULL) {
+    if (entryp_moving->nextp == entryp) {
+      entryp_moving->nextp = entryp->nextp;
+      return next_entryp;
+    }
+    entryp_moving = entryp_moving->nextp;
+  }
+
+  assert(0);
 }
 
 void free_table(struct st_table *tablep) {
@@ -99,15 +123,15 @@ void free_table(struct st_table *tablep) {
   tablep->entriesp = NULL;
   free(tablep->binspp);
   tablep->binspp = NULL;
-  // free(tablep);???
+  //  free(tablep); // causes segfault. idk why.
 }
 
 /* Expand bins array, expand entries allocation, and rehash. */
 void expand_table(struct st_table *tablep){
   int i;
-  struct st_entry *entryp;
+  struct st_entry *entryp, *next_entryp, *tmp1, **tmp2;
   struct st_entry *old_entriesp, *new_entriesp;
-  int entriesp_difference;
+  long entriesp_diff;
   size_t old_num_bins, new_num_bins;
 
   /* Note old and new number of entries. */
@@ -115,41 +139,54 @@ void expand_table(struct st_table *tablep){
   new_num_bins = tablep->num_bins * EXPAND_FACTOR;
   tablep->num_bins = new_num_bins;
 
-  /* Realloc the entries.
-     Note old and new entriesp location, and difference. */
+  /* Realloc the entries (see note at bottom about when realloc
+     fails). Note old and new entriesp location, and difference. */
   old_entriesp = tablep->entriesp;
-  tablep->entriesp = realloc(tablep->entriesp,
-                             new_num_bins * sizeof(struct st_entry));
+
+  tmp1 = realloc(tablep->entriesp, new_num_bins * sizeof(struct st_entry));
+  if (tmp1 != NULL) {
+    tablep->entriesp = tmp1;
+  } else { 
+    printf("realloc tablep->entriesp failed. hash table is too big!\n");
+    exit(0);
+  }
+
   new_entriesp = tablep->entriesp;
-  entriesp_difference = new_entriesp - old_entriesp;
+  entriesp_diff = new_entriesp - old_entriesp;
 
   /* Traverse table's entry list and update all the pointers. */
   if (tablep->headp != NULL)
-    tablep->headp += entriesp_difference; //Problem arises here. IDK why.
+    tablep->headp += entriesp_diff; //Problem arises here. IDK why.
   if (tablep->tailp != NULL)
-    tablep->tailp += entriesp_difference;
+    tablep->tailp += entriesp_diff;
   entryp = tablep->headp;
   while (entryp != NULL) {
+    //First entryp->forep is 0x14. Problem b/c 0x14->nextp is segfault.
     if (entryp->nextp != NULL)
       //Problem here. entryp->nextp is causing segfault.
       //entryp->nextp is 0xa on first run through loop.
-      entryp->nextp += entriesp_difference;
+      entryp->nextp += entriesp_diff;
     if (entryp->backp != NULL)
-      entryp->backp += entriesp_difference;
+      entryp->backp += entriesp_diff;
     if (entryp->forep != NULL)
-      entryp->forep += entriesp_difference;
+      entryp->forep += entriesp_diff;
     entryp = entryp->forep;
   }
 
   /* Update pointers in binspp. */
   for (i = 0; i < old_num_bins; i++) {
     if (tablep->binspp[i] != NULL)
-      tablep->binspp[i] += entriesp_difference;
+      tablep->binspp[i] += entriesp_diff;
   }
 
   /* Realloc for binspp. */
-  tablep->binspp = realloc(tablep->binspp,
-                           new_num_bins * sizeof(struct st_entry*));
+  tmp2 = realloc(tablep->binspp, new_num_bins * sizeof(struct st_entry*));
+  if (tmp2 != NULL) {
+    tablep->binspp = tmp2;
+  } else {
+    printf("realloc tablep->binspp failed. hash table is too big!\n");
+    exit(0);
+  }
 
   /* NULLify the new bins. */
   for (i = old_num_bins; i < new_num_bins; i++) {
@@ -158,11 +195,11 @@ void expand_table(struct st_table *tablep){
 
   /* For each bin, for each entry, move to appropriate bin
      if not already in it. */
-  for (i = 0; i < tablep->num_bins; i++) {
+  for (i = 0; i < old_num_bins; i++) {
     entryp = tablep->binspp[i];
     while (entryp != NULL) {
       if (BIN_IDX_FROM_ENTRYP(tablep, entryp) != i) {
-        del_from_bin_list(tablep, i, entryp);
+        next_entryp = del_from_bin_list(tablep, i, entryp);
         add_to_bin_list(tablep, entryp);
       }
       entryp = entryp->nextp;
@@ -184,9 +221,12 @@ object* get(struct st_table *tablep, object key) {
 }
 
 void set(struct st_table *tablep, object key, object *valuep) {
-  if(tablep->num_entries >= tablep->num_bins) 
+  if(tablep->num_entries >= tablep->num_bins) {
+    printf("Hello\n");
     expand_table(tablep);
+  }
 
+  // Or could find empty slot somehow, but that's harder.
   struct st_entry *entryp = &(tablep->entriesp[tablep->num_entries++]);
   entryp->key = key;
   entryp->hash = hash_func(key);
@@ -201,6 +241,8 @@ void delete(struct st_table *tablep, object key) {
 
   del_from_table_list(tablep, entryp);
   del_from_bin_list(tablep, BIN_IDX_FROM_ENTRYP(tablep, entryp), entryp);
+
+  tablep->num_entries--;
 
   return;
 }
@@ -262,4 +304,31 @@ struct st_entry* affinity_rehash(long *hashesp, size_t len) {
 //     entryp->nextp = entryp->nextp->nextp;
 //   }
 //   return;
+// }
+
+/* Remove entryp from the indicated bin's list. */
+/*
+void bad_del_from_bin_list(struct st_table *tablep, long bin_idx, struct st_entry *entryp) {
+  struct st_entry *entryp_moving = BIN_FROM_IDX(tablep, bin_idx);
+
+  if (entryp_moving == entryp) {
+    BIN_FROM_IDX(tablep, bin_idx) = entryp->nextp;
+  } else {
+    while (entryp_moving != NULL && entryp_moving->nextp != entryp) {
+      entryp_moving = entryp_moving->nextp;
+    }
+    if (entryp != NULL && entryp->nextp != NULL) {
+      entryp->nextp = entryp->nextp->nextp;
+    }
+  }
+}
+*/
+
+/* Note about realloc - when it fails. From http://stackoverflow.com/questions/1986538/how-to-handle-realloc-when-it-fails-due-to-memory */
+
+// tmp = realloc(orig, newsize);
+// if (tmp == NULL) {
+//   // could not realloc, but orig still valid
+// } else {
+//   orig = tmp;
 // }
