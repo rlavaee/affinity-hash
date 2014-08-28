@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#define INITIAL_SIZE 16 // size will be same as num_bins
+#define INITIAL_SIZE 8 // size will be same as num_bins
 #define EXPAND_FACTOR 2
 typedef long object;
 
@@ -97,6 +97,10 @@ struct st_entry * del_from_bin_list(struct st_table *tablep, long bin_idx, struc
   struct st_entry *next_entryp = entryp->nextp;
   struct st_entry *entryp_moving = BIN_FROM_IDX(tablep, bin_idx);
 
+  if (next_entryp < 0x10000 && next_entryp != NULL) {
+    ; //breakpoint
+  }
+
   if (entryp_moving == NULL){
     printf("Problem 1: see code\n");
     exit(0);
@@ -104,6 +108,9 @@ struct st_entry * del_from_bin_list(struct st_table *tablep, long bin_idx, struc
 
   if (entryp_moving == entryp) {
     BIN_FROM_IDX(tablep, bin_idx) = entryp->nextp;
+    if (next_entryp < 0x10000 && next_entryp != NULL) {
+      ; //breakpoint
+    }
     return next_entryp;
   }
 
@@ -129,8 +136,8 @@ void free_table(struct st_table *tablep) {
 /* Expand bins array, expand entries allocation, and rehash. */
 void expand_table(struct st_table *tablep){
   int i;
-  struct st_entry *entryp, *next_entryp, *tmp1, **tmp2;
-  struct st_entry *old_entriesp, *new_entriesp;
+  struct st_entry *entryp_moving, *next_entryp, *tmp1, **tmp2;
+  struct st_entry *old_entriesp, *entryp;
   long entriesp_diff;
   size_t old_num_bins, new_num_bins;
 
@@ -151,20 +158,21 @@ void expand_table(struct st_table *tablep){
     exit(0);
   }
 
-  new_entriesp = tablep->entriesp;
-  entriesp_diff = new_entriesp - old_entriesp;
+  entriesp_diff = tablep->entriesp - old_entriesp;
 
   /* Traverse table's entry list and update all the pointers. */
   if (tablep->headp != NULL)
-    tablep->headp += entriesp_diff; //Problem arises here. IDK why.
-  if (tablep->tailp != NULL)
-    tablep->tailp += entriesp_diff;
-  entryp = tablep->headp;
+    tablep->headp += entriesp_diff; // problem arises here. IDK why.
+  //  if (tablep->tailp != NULL)
+  //    tablep->tailp += entriesp_diff;
+
+  entryp_moving = tablep->headp;
+
   while (entryp != NULL) {
     //First entryp->forep is 0x14. Problem b/c 0x14->nextp is segfault.
     if (entryp->nextp != NULL)
-      //Problem here. entryp->nextp is causing segfault.
-      //entryp->nextp is 0xa on first run through loop.
+      //Problem here. entryp_moving->nextp is causing segfault.
+      //entryp_moving->nextp is 0xa on first run through loop.
       entryp->nextp += entriesp_diff;
     if (entryp->backp != NULL)
       entryp->backp += entriesp_diff;
@@ -172,7 +180,11 @@ void expand_table(struct st_table *tablep){
       entryp->forep += entriesp_diff;
     entryp = entryp->forep;
   }
-
+  
+  //LOOK HERE!
+  //IMPORTANT! Just use this, and inside of loop, traverse
+  //           by nextp's instead of using forep and backp
+  //           and headp and tailp :)
   /* Update pointers in binspp. */
   for (i = 0; i < old_num_bins; i++) {
     if (tablep->binspp[i] != NULL)
@@ -197,12 +209,21 @@ void expand_table(struct st_table *tablep){
      if not already in it. */
   for (i = 0; i < old_num_bins; i++) {
     entryp = tablep->binspp[i];
+
+    if (entryp->nextp < 0x10000 && entryp->nextp != NULL) {
+      ; //breakpoint
+    }
+
     while (entryp != NULL) {
+      next_entryp = entryp->nextp;
       if (BIN_IDX_FROM_ENTRYP(tablep, entryp) != i) {
         next_entryp = del_from_bin_list(tablep, i, entryp);
         add_to_bin_list(tablep, entryp);
       }
-      entryp = entryp->nextp;
+      if (next_entryp < 0x10000 && next_entryp != NULL) {
+        ; //breakpoint
+      }
+      entryp = next_entryp; //entryp->nextp;
     }
   }
 }
@@ -222,7 +243,6 @@ object* get(struct st_table *tablep, object key) {
 
 void set(struct st_table *tablep, object key, object *valuep) {
   if(tablep->num_entries >= tablep->num_bins) {
-    printf("Hello\n");
     expand_table(tablep);
   }
 
@@ -332,3 +352,14 @@ void bad_del_from_bin_list(struct st_table *tablep, long bin_idx, struct st_entr
 // } else {
 //   orig = tmp;
 // }
+
+    // right inside while loop for traversing table's entry list
+    //    if ((long)entryp->nextp < 0x100000000 &&
+    //        entryp->nextp != NULL) {
+    //      ;//breakpoint here
+      //    }
+    //    if (entryp->nextp != NULL &&
+    //        (entryp->nextp + entriesp_diff)->nextp != NULL &&
+    //        (long)(entryp->nextp + entriesp_diff)->nextp < 0x100000000) {
+    //      ;//breakpoint here
+    //    }
