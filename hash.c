@@ -1,3 +1,5 @@
+/* Brandon's Great Idea - replace "next" pointers with relative skips. */
+
 #include <stdlib.h>
 #include <assert.h>
 
