@@ -15,15 +15,15 @@ static char * test_entry() {
   object x1 = 11;
   entry1.valuep = &x1;
   entry1.nextp = &entry2;
-  entry1.backp = &entry2;
-  entry1.forep = NULL;
+  // entry1.backp = &entry2;
+  // entry1.forep = NULL;
 
   entry2.key = 2;
   object x2 = 22;
   entry2.valuep = &x1;
   entry2.nextp = &entry1;
-  entry2.backp = NULL;
-  entry2.forep = &entry1;
+  // entry2.backp = NULL;
+  // entry2.forep = &entry1;
 
   return 0;
 }
@@ -67,15 +67,14 @@ static char * test_expand_table_1() {
   size_t num_bins1 = tablep->num_bins;
 
   object x = 2;
-  set(tablep, 10, &x);
+  set(tablep, 20, &x);
 
-  object *result1 = get(tablep, 10);
+  object *result1 = get(tablep, 20);
   mu_assert("get(tablep, 10) didn't work.", *result1 == 2);
 
   expand_table(tablep);
-
   mu_assert("expand_table(tablep) did not change num_bins.",
-            tablep->num_bins != num_bins1);
+            tablep->num_bins == 2 * num_bins1);
   mu_assert("get(tablep, 10) didn't work.", *result1 == 2);
 
   free_table(tablep);
@@ -92,22 +91,22 @@ static char * test_expand_table_2() {
   object *xs = malloc((num_bins1+1) * sizeof(object));
 
   object x = 1;
-
-  for (i = 0; i < 2 * num_bins1; i++) {
-    // xs[i] = 2*i;
+  //  for (i = 0; i < 2 * num_bins1; i++) {
+  for (i = 0; i < 2 * num_bins1+1; i++) { // causes segfault.
+    xs[i] = 2*i;
     set(tablep, i, &x);
   }
 
   mu_assert("num_bins not correct",
-            tablep->num_bins > num_bins1);
+            tablep->num_bins == 2 * num_bins1);
 
   return 0;
 }
 
 static char * all_tests() {
-  mu_run_test(test_entry);
-  mu_run_test(test_set_delete);
-  mu_run_test(test_expand_table_1);
+  //  mu_run_test(test_entry);
+  //  mu_run_test(test_set_delete);
+  //  mu_run_test(test_expand_table_1);
   mu_run_test(test_expand_table_2);
 
   return 0;

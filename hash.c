@@ -20,18 +20,13 @@ struct st_entry {
   object key;
   object *valuep;
   struct st_entry *nextp; // Singly linked list for bin
-  struct st_entry *backp; // Doubly linked list for table
-  struct st_entry *forep; // Doubly linked list for table
 };
 
 struct st_table {
   size_t num_bins;
   size_t num_entries;
-
   struct st_entry *entriesp;
   struct st_entry **binspp;
-  struct st_entry *headp; // Doubly linked list for table
-  struct st_entry *tailp; // Doubly linked list for table
 };
 
 struct st_table* new_tablep() {
@@ -51,7 +46,6 @@ struct st_table* new_tablep() {
     }
   }
 
-  tablep->headp = tablep->tailp = NULL;
   return tablep;
 }
 
@@ -60,30 +54,30 @@ long hash_func(object key) {
 }
 
 /** List Management */
-/* Add entryp to the table's list. */
-void add_to_table_list(struct st_table *tablep, struct st_entry *entryp) {
-  if (tablep->headp == NULL) {
-    tablep->headp = tablep->tailp = entryp;
-    entryp->backp = entryp->forep = NULL;
-  } else {
-    tablep->tailp->forep = entryp;
-    entryp->backp = tablep->tailp;
-    tablep->tailp = entryp;
-  }
-} 
+// /* Add entryp to the table's list. */
+// void add_to_table_list(struct st_table *tablep, struct st_entry *entryp) {
+//   if (tablep->headp == NULL) {
+//     tablep->headp = tablep->tailp = entryp;
+//     entryp->backp = entryp->forep = NULL;
+//   } else {
+//     tablep->tailp->forep = entryp;
+//     entryp->backp = tablep->tailp;
+//     tablep->tailp = entryp;
+//   }
+// } 
 
-/* Remove from table's list, but leave data there. */
-void del_from_table_list(struct st_table *tablep, struct st_entry *entryp) {
-  // Can optimize these conditionals.
-  if (entryp->backp != NULL)
-    entryp->backp->forep = entryp->forep;
-  if (entryp->forep != NULL)
-    entryp->forep->backp = entryp->backp;
-  if (entryp == tablep->headp)
-    tablep->headp = entryp->forep; //Should be NULL
-  if (entryp == tablep->tailp)
-    tablep->tailp = entryp->nextp; //Should be NULL
-}
+// /* Remove from table's list, but leave data there. */
+// void del_from_table_list(struct st_table *tablep, struct st_entry *entryp) {
+//   // Can optimize these conditionals.
+//   if (entryp->backp != NULL)
+//     entryp->backp->forep = entryp->forep;
+//   if (entryp->forep != NULL)
+//     entryp->forep->backp = entryp->backp;
+//   if (entryp == tablep->headp)
+//     tablep->headp = entryp->forep; //Should be NULL
+//   if (entryp == tablep->tailp)
+//     tablep->tailp = entryp->nextp; //Should be NULL
+// }
 
 /* Add entryp to the appropriate bin's list.
    Memory must be zeroed PRIOR to calling this! */
@@ -150,55 +144,44 @@ void expand_table(struct st_table *tablep){
      fails). Note old and new entriesp location, and difference. */
   old_entriesp = tablep->entriesp;
 
-  tmp1 = realloc(tablep->entriesp, new_num_bins * sizeof(struct st_entry));
-  if (tmp1 != NULL) {
-    tablep->entriesp = tmp1;
-  } else { 
-    printf("realloc tablep->entriesp failed. hash table is too big!\n");
-    exit(0);
-  }
+  // tmp1 = realloc(tablep->entriesp, new_num_bins * sizeof(struct st_entry));
+  tablep->entriesp = realloc(tablep->entriesp, new_num_bins * sizeof(struct st_entry));
+  // if (tmp1 != NULL) {
+  //   tablep->entriesp = tmp1;
+  // } else { 
+  //   printf("realloc tablep->entriesp failed. hash table is too big!\n");
+  //   exit(0);
+  // }
 
   entriesp_diff = tablep->entriesp - old_entriesp;
 
-  /* Traverse table's entry list and update all the pointers. */
-  if (tablep->headp != NULL)
-    tablep->headp += entriesp_diff; // problem arises here. IDK why.
-  //  if (tablep->tailp != NULL)
-  //    tablep->tailp += entriesp_diff;
-
-  entryp_moving = tablep->headp;
-
-  while (entryp != NULL) {
-    //First entryp->forep is 0x14. Problem b/c 0x14->nextp is segfault.
-    if (entryp->nextp != NULL)
-      //Problem here. entryp_moving->nextp is causing segfault.
-      //entryp_moving->nextp is 0xa on first run through loop.
-      entryp->nextp += entriesp_diff;
-    if (entryp->backp != NULL)
-      entryp->backp += entriesp_diff;
-    if (entryp->forep != NULL)
-      entryp->forep += entriesp_diff;
-    entryp = entryp->forep;
-  }
-  
-  //LOOK HERE!
-  //IMPORTANT! Just use this, and inside of loop, traverse
-  //           by nextp's instead of using forep and backp
-  //           and headp and tailp :)
-  /* Update pointers in binspp. */
+  /* Update pointers. */
   for (i = 0; i < old_num_bins; i++) {
-    if (tablep->binspp[i] != NULL)
+    if (tablep->binspp[i] != NULL) {
       tablep->binspp[i] += entriesp_diff;
+
+      entryp_moving = tablep->binspp[i];
+      int jake = 0;
+      while (entryp_moving->nextp != NULL) {
+        if (entryp_moving->nextp < 0x10000 && next_entryp != NULL) {
+          ; //breakpoint
+        }
+        jake++;
+        entryp_moving->nextp += entriesp_diff;
+        entryp_moving = entryp_moving->nextp;
+      }
+    }
   }
 
   /* Realloc for binspp. */
-  tmp2 = realloc(tablep->binspp, new_num_bins * sizeof(struct st_entry*));
-  if (tmp2 != NULL) {
-    tablep->binspp = tmp2;
-  } else {
-    printf("realloc tablep->binspp failed. hash table is too big!\n");
-    exit(0);
-  }
+  // tmp2 = realloc(tablep->binspp, new_num_bins * sizeof(struct st_entry*));
+  tablep->binspp = realloc(tablep->binspp, new_num_bins * sizeof(struct st_entry*));
+  // if (tmp2 != NULL) {
+  //   tablep->binspp = tmp2;
+  // } else {
+  //   printf("realloc tablep->binspp failed. hash table is too big!\n");
+  //   exit(0);
+  // }
 
   /* NULLify the new bins. */
   for (i = old_num_bins; i < new_num_bins; i++) {
@@ -209,10 +192,6 @@ void expand_table(struct st_table *tablep){
      if not already in it. */
   for (i = 0; i < old_num_bins; i++) {
     entryp = tablep->binspp[i];
-
-    if (entryp->nextp < 0x10000 && entryp->nextp != NULL) {
-      ; //breakpoint
-    }
 
     while (entryp != NULL) {
       next_entryp = entryp->nextp;
@@ -252,15 +231,17 @@ void set(struct st_table *tablep, object key, object *valuep) {
   entryp->hash = hash_func(key);
   entryp->valuep = valuep;
 
-  add_to_table_list(tablep, entryp);
+  // add_to_table_list(tablep, entryp);
   add_to_bin_list(tablep, entryp);
 }
 
 void delete(struct st_table *tablep, object key) {
   struct st_entry *entryp = BIN_FROM_KEY(tablep, key);
 
-  del_from_table_list(tablep, entryp);
+  // del_from_table_list(tablep, entryp);
   del_from_bin_list(tablep, BIN_IDX_FROM_ENTRYP(tablep, entryp), entryp);
+
+  // NEED TO ZERO THE MEMORY?!?!?!
 
   tablep->num_entries--;
 
