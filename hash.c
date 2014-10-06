@@ -1,14 +1,12 @@
 #include <stdlib.h>
 #include <assert.h>
-#include <stdint.h> // so that SIZE_MAX is available (in 2's complement it's fffffffff)
 #include <stdio.h>
 
 /** Hashtable constants */
-#define INITIAL_SIZE 20 // size will be same as num_bins
+#define INITIAL_SIZE 11 // size will be same as num_bins
 #define EXPAND_FACTOR 2
 
 /** Types used */
-typedef size_t offset_t; // 11111... is impossible offset
 typedef long key_type;
 typedef long val_type;
 typedef unsigned hash_type;
@@ -23,10 +21,6 @@ typedef unsigned hash_type;
 #define BIN_FROM_KEY(table, key)     table->bins[BIN_IDX_FROM_KEY(table, key)    ]
 #define BIN_FROM_IDX(table, idx)     table->bins[idx                             ]
 
-/** Address Calculation from Offset */
-#define ADDRESS_OF(addr, offst) ((addr) + (offst))
-#define OFFSET_FROM(src_addr, dah_addr) (abs((dah_addr) - (src_addr)))
-
 typedef struct ah_entry {
   hash_type hash;
   key_type key;
@@ -38,7 +32,7 @@ typedef struct ah_table {
   size_t num_bins;
   size_t num_entries;
   ah_entry *entries;
-  ah_entry **bins; // Stores the offset from entries to first bin element
+  ah_entry **bins;
 } ah_table;
 
 ah_table *new_table() {
@@ -71,8 +65,8 @@ hash_type hash_func(void *key, size_t len) {
 
   for(hash = i = 0; i < len; ++i) {
     hash += arr[i];
-	hash += (hash << 10);
-	hash += (hash >> 6);
+    hash += (hash << 10);
+    hash += (hash >> 6);
   }
 
   hash += (hash << 3);
@@ -161,7 +155,6 @@ void insert(ah_table *table, key_type key, val_type *value) {
     expand_table(table);
 
   // Create a new entry.
-  // Note: This should eventually defrag.
   ah_entry *entry = &(table->entries[table->num_entries++]);
   entry->key = key;
   entry->hash = hashed_key;
@@ -186,11 +179,13 @@ int main() {
 
     long i;
 
-    for(i=0; i < 400000; i++) {
+    for(i=0; i < 4000; i++) {
         long *temp = malloc(sizeof(long));
         *temp = i;
         insert(table, i, temp);
         printf("%lu, ", *search(table, i));
     }
+
+    free_table(table);
 }
 
