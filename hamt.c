@@ -5,10 +5,6 @@
 //Hash
 #include "xxhash.h"
 
-// Tests
-#include <time.h>
-#include <stdlib.h>
-
 /** Hashtable constants */
 #define MAP_SIZE 32
 #define HASH_SIZE 64
@@ -28,7 +24,7 @@
 
 /** Types used */
 typedef long key_object;
-typedef long val_object;
+typedef void *val_object;
 typedef unsigned long long hash_object;
 typedef unsigned map_object;
 
@@ -47,7 +43,7 @@ typedef union {
 } ah_entry;
 
 struct ah_map {
-    //unsigned size;
+    bool analysis_bit;
     ah_entry array[0];
 };
 
@@ -73,11 +69,10 @@ static inline bool ah_map_has_index(ah_entry *, unsigned);
 // Progress map search values to next state.
 static inline void ah_entry_next(key_object *, hash_object *, unsigned *, unsigned *);
 
-// Check whether current entry is a map or key/val
+// Check whether current entry is a map or key/val.
 static inline bool ah_entry_is_map(ah_entry *);
 
-// Credit: Jenkins, Bob (September 1997). "Hash functions". Dr. Dobbs Journal.
-static hash_object  ah_hash(void *, size_t, int);
+static hash_object ah_hash(void *, size_t, int);
 
 static ah_map *ah_get_map(ah_entry *current_entry) {
     return (ah_map *)AMT_CLEAR_MSb(current_entry->node);
@@ -92,7 +87,7 @@ ah_table *init_table(void) {
     ah_table *new_table = malloc(sizeof(ah_table));
 
     new_table->map = 0;
-    new_table->node = ah_set_map(malloc(sizeof(ah_map))); // ALLOCATING 0
+    new_table->node = ah_set_map(malloc(sizeof(ah_map)));
 
     return new_table;
 }
@@ -150,20 +145,46 @@ val_object *search(ah_table *table, key_object key) {
     }
 }
 
-bool remove(ah_table *root, key_object key);
+// Finds the corresponding map of a location deteremined by hash + offset. 
+// If a map doesn't exist at the location NULL is returned.
+// Offset has to be: 0, INDEX_SIZE, 2*INDEX_SIZE,..., N*INDEX_SIZE <= HASH_SIZE.
+ah_map *retrieve_map_for_hash_val(ah_table *table, hash_object hash_val, unsigned offset) {
+    hash_object current_hash = hash_val;
+    unsigned current_off = 0;
+    unsigned current_lvl = 0;
+    
+    ah_entry *current_entry = table;
+
+    while(current_off < offset) {
+        if(ah_entry_is_map(current_entry)) {
+            unsigned index = ah_uncompressed_index(current_hash, current_off);
+
+            // Descend to the next map.
+            if(ah_map_has_index(current_entry, index)) {
+                current_entry = &ah_get_map(current_entry)->array[ah_compressed_index(current_entry, index)];
+                
+                current_lvl += 1;
+                current_off += INDEX_SIZE;
+            } else return NULL;
+        } else return NULL;
+    }
+
+    return ah_entry_is_map(current_entry) ? ah_get_map(current_entry) : NULL;
+}
+
+//bool remove(ah_table *root, key_object key);
 
 /** Internal management functions */
 static inline bool ah_map_has_index(ah_entry *current_entry, unsigned uncompressed_index) {
     return BITS_GET(current_entry->map,uncompressed_index);
 }
 
-//unsigned long long trans = 0;
 // Resolves a collision by converting a key/val to a map/ptr.
 static inline void ah_transmute(ah_entry *entry, hash_object hash, unsigned off, unsigned lvl) {
-
-    //trans++;
     // Move the current entry to new map.
     ah_map *new_map = malloc(sizeof(ah_map) + sizeof(ah_entry));
+    new_map->analysis_bit = false;
+
     memmove(&new_map->array[0], entry, sizeof(ah_entry));
     
     hash_object old_hash = ah_hash(&entry->key, sizeof(key_object), -1);
@@ -227,29 +248,12 @@ static inline bool ah_entry_is_map(ah_entry *current_entry) {
     return AMT_CHECK_MSb(current_entry->node);
 }
 
-// Credit: Jenkins, Bob (September 1997). "Hash functions". Dr. Dobbs Journal.
 static hash_object ah_hash(void *key, size_t len, int level) {
-    static keep_lvl = 0;
+    static int keep_lvl = 0;
 
     if (level != -1 && level != keep_lvl) keep_lvl = level;
     
     return XXH64(key, len, keep_lvl); 
-    /*
-    unsigned hash, i;
-    unsigned char *arr = key;
-    
-    for(hash = i = 0; i < len; ++i) {
-    	hash += (arr[i] + keep_lvl);
-	hash += (hash << 10);
-	hash += (hash >> 6);
-    }
-
-    hash += (hash << 3);
-    hash ^= (hash >> 11);
-    hash += (hash << 15);
-
-    return hash;
-    */
 }
 
 unsigned long long counter[MAP_SIZE];
@@ -261,33 +265,9 @@ void count(ah_entry *current_entry) {
         unsigned i, elements =  BITS_CNT(current_entry->map, 0);
 
         (counter[elements-1])++;
-	
-	// Iterate through all children
+        
+        // Iterate through all children
         for(i = 0; i < elements; i++)
             count(&ah_get_map(current_entry)->array[i]);
     }
-}
-
-int main() {
-
-    srand(time(NULL));
-
-    ah_table *table = init_table();
-
-    long val = 23444523, key;
-
-    // Insert random numbers
-    for(key = 0; key < 8192000; key++)
-        insert(table, rand(), &val);
-
-    //for(key = 0; key < 20000000; key++)
-    //    if(search(table, key) != &val)
-    //    	printf("Oh no!\n");
-
-    //count(table);
-
-    //for(key = 0; key < MAP_SIZE; key++)
-    //    printf("%llu\n", counter[key]);
-
-    //printf("Total collisions: %llu\n", trans);
 }
