@@ -7,12 +7,18 @@
 #include <iomanip>
 #include <unordered_map>
 
+/*
 #ifdef NOT_RUBY
 #include "regint.h"
 #include "st.h"
 #else
 #include "ruby/ruby.h"
 #endif
+*/
+
+#include "hamt.c"
+
+
 
 typedef uint16_t wsize_t;
 wsize_t max_fpdist;
@@ -23,13 +29,13 @@ uint32_t timestamp = 0;
 
 //affinity representation of a hash table entry
 struct hash_t{
-  st_table *table_ptr;
+  ah_table *table_ptr;
 
-  st_index_t hash_val;
+  hash_object hash_val;
 
   hash_t(){};
 
-  hash_t(st_table *a, st_index_t b): table_ptr(a),hash_val(b) {};
+  hash_t(ah_table *a, hash_object b): table_ptr(a),hash_val(b) {};
 
   hash_t(const hash_t &hentry): table_ptr(hentry.table_ptr), hash_val(hentry.hash_val){};
 
@@ -55,8 +61,8 @@ struct hash_t{
 struct hash_t_hash {
   size_t operator()(hash_t const& hentry) const
   {
-    size_t const h1 ( std::hash<st_table*>()(hentry.table_ptr) );
-    size_t const h2 ( std::hash<st_index_t>()(hentry.hash_val) );
+    size_t const h1 ( std::hash<ah_table*>()(hentry.table_ptr) );
+    size_t const h2 ( std::hash<hash_object>()(hentry.hash_val) );
     return h1 ^ (h2 << 1);
   }
 };
@@ -257,5 +263,5 @@ uint32_t hist_pair_add (const uint32_t psum, const hist_pair_t &e){
 void affinity_at_exit_handler();
 extern "C" void init_affinity_analysis();
 void update_stage_affinity(const hash_t&, const window_list_t::iterator&);
-extern "C" void trace_hash_access(st_table *, st_index_t, bool);
-extern "C" void remove_table_analysis(st_table *);
+extern "C" void trace_hash_access(ah_table *, hash_object, bool);
+extern "C" void remove_table_analysis(ah_table *);

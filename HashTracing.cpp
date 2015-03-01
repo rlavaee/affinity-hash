@@ -257,7 +257,7 @@ void add_compress_update(const hash_t& entry, bool analysis){
 }
 
 
-inline void trace_hash_access(st_table * tbl, st_index_t hash_val, bool analysis_bit){
+inline void trace_hash_access(ah_table * tbl, hash_object hash_val, bool analysis_bit){
 
 		/*
 		 * Count down and transit into the next stage if count drops to zero.
@@ -347,7 +347,7 @@ inline void trace_hash_access(st_table * tbl, st_index_t hash_val, bool analysis
 
 		}
 
-		void remove_table_analysis(st_table * tbl){
+		void remove_table_analysis(ah_table * tbl){
 				entry_vec_t::iterator it=analysis_vec.begin();
 				while(it!=analysis_vec.end()){
 						if(it->table_ptr==tbl)
