@@ -197,7 +197,7 @@ ah_map *retrieve_map_for_hash_val(ah_table *table, hash_object hash_val, unsigne
     
     ah_entry *current_entry = table;
 
-    while(current_off < offset) {
+    while(current_off != offset) {
         if(ah_entry_is_map(current_entry)) {
             unsigned index = ah_uncompressed_index(current_hash, current_off);
 
@@ -207,15 +207,11 @@ ah_map *retrieve_map_for_hash_val(ah_table *table, hash_object hash_val, unsigne
                 
                 current_lvl += 1;
                 current_off += INDEX_SIZE;
-            } else break; //return ah_get_map(current_entry);
-        } else break;
+            } else return NULL;
+        } else return NULL;
     }
 
-    if (ah_entry_is_map(current_entry)){
-        // if((offset - current_off)) printf("(%d, %d) ", current_off, offset);
-        return ah_get_map(current_entry);
-    } else 
-        return NULL;
+    return ah_get_map(current_entry);
 }
 
 //bool remove(ah_table *root, key_object key);
