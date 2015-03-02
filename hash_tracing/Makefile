@@ -13,7 +13,3 @@ HashTracing.o: HashTracing.cpp HashTracing.hpp
 
 libhash_trace$(SO): HashTracing.o
 	$(CXX) $(LXDFLAGS) -shared -o $@ $<
-
-# Tests for the hash table.
-test:
-	$(CXX) -Wall hash_test.c xxhash.c -o test

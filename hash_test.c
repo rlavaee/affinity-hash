@@ -3,6 +3,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
+
 #include "minunit.h"
 #include "hamt.c"
 
@@ -34,21 +35,16 @@ static char *test_ins_find() {
     return 0;
 }
 
+// Ensures all accesses to map can be properly reached(when tracing is on).
 static char *test_retrieve_map() {
-    srand(time(NULL));
+    if(!trace_start) return 0;
 
-    ah_table *table = init_table();
-    static const long size = 200000;
-    long val[size] = {0}, key;    
-   
-    for(key = 0; key < size; key++) val[key] = rand(); 
+    ah_access *current = trace_start->next;
 
-    for(key = 0; key < size; key++)
-        insert(table, key, &val[key]);
+    while((current = current->next))
+        mu_assert("Internal node search works", 
+            retrieve_map_for_hash_val(current->table, current->hash, current->offset) != NULL);
 
-    long idx = 20000;
-    ah_map *a_map = retrieve_map_for_hash_val(table, XXH64(&idx, sizeof(key_object), 0), 15); 
-    
     return 0;
 }
 

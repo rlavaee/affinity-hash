@@ -1,9 +1,10 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <stdbool.h>
 
-//Hash
 #include "xxhash.h"
+
 
 /** Hashtable constants */
 #define MAP_SIZE 32
@@ -23,10 +24,10 @@
 #define AMT_CLEAR_MSb(ptr) (((long long)ptr) & ~0x1)
 
 /** Types used */
-typedef long key_object;
-typedef void *val_object;
-typedef unsigned long long hash_object;
-typedef unsigned map_object;
+typedef uint64_t key_object;
+typedef uintptr_t val_object;
+typedef uint64_t hash_object;
+typedef uint32_t map_object;
 
 /** Structures used */
 typedef struct ah_map ah_map;
@@ -49,6 +50,39 @@ struct ah_map {
 
 typedef ah_entry ah_table;
 
+/** Functions to trace all accesses to map */
+typedef struct ah_access{
+    ah_table *table;
+    hash_object hash;
+    unsigned offset;
+    ah_map *map;
+    struct ah_access *next;
+} ah_access;
+
+ah_access *trace_start = NULL;
+ah_access *trace_end = NULL;
+
+void mark_access(ah_table *tbl, ah_map *map, hash_object hash_val, unsigned offset) {
+    if(trace_start == NULL) {
+        trace_start = malloc(sizeof(ah_access));
+        trace_end = trace_start;
+    }
+
+    trace_end->next = malloc(sizeof(ah_access));
+    trace_end = trace_end->next;
+
+    trace_end->table = tbl;
+    trace_end->hash = hash_val;
+    trace_end->offset = offset;
+    trace_end->map = map;
+    trace_end->next = NULL;
+}
+
+#ifdef TRACE_MAP
+#define TRACE_ACCESS(t, m, h, o) mark_access((t), (m), (h), (o))
+#else
+#define TRACE_ACCESS(t, m, h, o)
+#endif
 
 /** Structural minipulation functions */
 // Resolves a collision by converting a key/val to a map/ptr.
@@ -89,6 +123,8 @@ ah_table *init_table(void) {
     new_table->map = 0;
     new_table->node = ah_set_map(malloc(sizeof(ah_map)));
 
+    ah_get_map(new_table)->analysis_bit = false;
+
     return new_table;
 }
 
@@ -101,6 +137,9 @@ void insert(ah_table *table, key_object key, val_object *val) {
 
     for(;;) {
         if(ah_entry_is_map(current_entry)) {
+            // Trace all accesses to internal map nodes (the if is temporary).
+            if(current_off < 64) TRACE_ACCESS(table, ah_get_map(current_entry), current_hash, current_off);
+            
             unsigned index = ah_uncompressed_index(current_hash, current_off);
             
             // Descend to the next map.
@@ -118,7 +157,7 @@ void insert(ah_table *table, key_object key, val_object *val) {
         // new entry into it next iteration.
         } else {
             if(current_entry->key != key) 
-                ah_transmute(current_entry, current_hash, current_off, current_lvl);
+                ah_transmute(current_entry, current_hash, current_lvl, current_off);
             else break;
         }
     }
@@ -133,6 +172,9 @@ val_object *search(ah_table *table, key_object key) {
 
     for(;;) {
         if(ah_entry_is_map(current_entry)) {
+            // Trace all accesses to internal map nodes (the if is temporary).
+            if(current_off < 64) TRACE_ACCESS(table, ah_get_map(current_entry), current_hash, current_off);
+
             unsigned index = ah_uncompressed_index(current_hash, current_off);
 
             // Descend to the next map.
@@ -165,11 +207,15 @@ ah_map *retrieve_map_for_hash_val(ah_table *table, hash_object hash_val, unsigne
                 
                 current_lvl += 1;
                 current_off += INDEX_SIZE;
-            } else return NULL;
-        } else return NULL;
+            } else break; //return ah_get_map(current_entry);
+        } else break;
     }
 
-    return ah_entry_is_map(current_entry) ? ah_get_map(current_entry) : NULL;
+    if (ah_entry_is_map(current_entry)){
+        // if((offset - current_off)) printf("(%d, %d) ", current_off, offset);
+        return ah_get_map(current_entry);
+    } else 
+        return NULL;
 }
 
 //bool remove(ah_table *root, key_object key);
@@ -180,7 +226,8 @@ static inline bool ah_map_has_index(ah_entry *current_entry, unsigned uncompress
 }
 
 // Resolves a collision by converting a key/val to a map/ptr.
-static inline void ah_transmute(ah_entry *entry, hash_object hash, unsigned off, unsigned lvl) {
+static inline void ah_transmute(ah_entry *entry, hash_object hash, unsigned lvl, unsigned off) {
+
     // Move the current entry to new map.
     ah_map *new_map = malloc(sizeof(ah_map) + sizeof(ah_entry));
     new_map->analysis_bit = false;
@@ -232,7 +279,7 @@ static inline unsigned ah_compressed_index(ah_entry *current_map, unsigned uncom
 }
 
 // Progress map search values to next state.
-static inline void ah_entry_next(key_object *key, hash_object *hash, unsigned *off, unsigned *lvl) {
+static inline void ah_entry_next(key_object *key, hash_object *hash, unsigned *lvl, unsigned *off) {
     *lvl += 1;
     *off += INDEX_SIZE;
     
