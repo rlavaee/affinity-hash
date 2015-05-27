@@ -1,5 +1,5 @@
 CXX=gcc
-SO=.so
+SO=.dylib
 CXXFLAGS = -std=c++11 -I ../include -Wall
 LXDFLAGS = -lstdc++
 
