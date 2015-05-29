@@ -1,3 +1,6 @@
+#ifndef HASHTRACING_H
+#define HASHTRACING_H
+
 #include <list>
 #include <unordered_set>
 #include <stdint.h>
@@ -16,10 +19,9 @@
 #include "ruby/ruby.h"
 #endif
 */
-#include "../hamt.h"
+#include "../hash_table.h"
 
-
-typedef std::pair<hash_object,unsigned> ah_map_id;
+// typedef std::pair<hash_object,unsigned> ah_map_id;
 
 typedef uint16_t wsize_t;
 wsize_t max_fpdist;
@@ -32,36 +34,46 @@ uint32_t timestamp = 0;
 struct hash_t {
     ah_table *table_ptr;
 
-    hash_object hash_val;
+    ptrdiff_t entry_index;
 
-    unsigned offset;
+    // hash_object hash_val;
+
+    //unsigned offset;
 
     hash_t() {};
 
-    hash_t(ah_table *a, hash_object b, unsigned c): table_ptr(a),hash_val(b), offset(c) {};
+    hash_t(ah_table *a, ptrdiff_t i): table_ptr(a), entry_index(i) {};
 
-    hash_t(const hash_t &hentry): table_ptr(hentry.table_ptr), hash_val(hentry.hash_val), offset(hentry.offset) {};
+    hash_t(const hash_t &hentry): table_ptr(hentry.table_ptr), entry_index(hentry.entry_index) {}; 
 
     bool operator == (const hash_t &rhs) const {
-        return table_ptr==rhs.table_ptr && hash_val==rhs.hash_val && offset == rhs.offset;
+        return table_ptr==rhs.table_ptr && entry_index == rhs.entry_index;
+        //return table_ptr==rhs.table_ptr && hash_val==rhs.hash_val && offset == rhs.offset;
     }
 
     bool operator < (const hash_t &rhs) const {
+        
         if(table_ptr < rhs.table_ptr)
             return true;
         else if(table_ptr > rhs.table_ptr)
             return false;
 
+        if(entry_index < rhs.entry_index)
+            return true;
+        else
+            return false;
+        /*
         if(hash_val < rhs.hash_val)
             return true;
         else if(hash_val > rhs.hash_val)
             return false;
 
         return (offset < rhs.offset);
+        */
     }
 
     friend std::ostream& operator << (std::ostream& out, const hash_t& obj) {
-        out << "(" << std::setbase(16) << obj.table_ptr << ", " << obj.hash_val << ", " << obj.offset << ")" << std::setbase(10);
+        out << "(" << std::setbase(16) << obj.table_ptr << ", " << obj.entry_index << ")" << std::setbase(10);
         return out;
     }
 };
@@ -70,9 +82,11 @@ struct hash_t_hash {
     size_t operator()(hash_t const& hentry) const
     {
         size_t const h1 ( std::hash<ah_table*>()(hentry.table_ptr) );
-        size_t const h2 ( std::hash<hash_object>()(hentry.hash_val) );
-        size_t const h3 ( std::hash<unsigned>()(hentry.offset) );
-        return h1 ^ (h3 ^ ((h2 << 1) << 1));
+        size_t const h2 ( std::hash<ptrdiff_t>()(hentry.entry_index) );
+        //size_t const h3 ( std::hash<unsigned>()(hentry.offset) );
+        //return h1 ^ (h3 ^ ((h2 << 1) << 1));
+        
+        return h1 ^ (h2 << 1);
     }
 };
 
@@ -148,9 +162,6 @@ struct all_wcount_t {
         }
         return out;
     }
-
-
-
 };
 
 typedef std::unordered_map <const hash_t, all_wcount_t , hash_t_hash > all_wcount_map_t;
@@ -187,7 +198,6 @@ struct window_t {
     void push_front(const hash_t& entry) {
         wsize++;
     }
-
 
     void erase(const entry_list_t::iterator& it) {
         //partial_entry_list.erase(it);
@@ -249,10 +259,6 @@ typedef std::unordered_map <const hash_t, window_list_t::iterator, hash_t_hash >
 typedef std::unordered_map <const hash_t, entry_list_t::iterator, hash_t_hash > entry_iterator_map_t;
 
 
-
-
-
-
 hist_pair_t get_hist_entry (const std::pair<const hash_t, wcount_t> &p) {
     return hist_pair_t (p.first,p.second.all_windows);
 }
@@ -272,5 +278,7 @@ uint32_t hist_pair_add (const uint32_t psum, const hist_pair_t &e) {
 void affinity_at_exit_handler();
 extern "C" void init_affinity_analysis();
 void update_stage_affinity(const hash_t&, const window_list_t::iterator&);
-extern "C" void trace_hash_access(ah_table *, hash_object, unsigned, bool);
+extern "C" void trace_hash_access(ah_table *, ptrdiff_t, bool);
 extern "C" void remove_table_analysis(ah_table *);
+
+#endif

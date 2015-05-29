@@ -8,7 +8,6 @@
 #include <vector>
 #include <iostream>
 
-
 /*
  * Debugging
  */
@@ -257,7 +256,7 @@ compress:
 }
 
 
-extern "C" void trace_hash_access(ah_table * tbl, hash_object hash_val, unsigned offset, bool analysis_bit) {
+extern "C" void trace_hash_access(ah_table * tbl, ptrdiff_t entry_index, bool analysis_bit) {
 
     /*
      * Count down and transit into the next stage if count drops to zero.
@@ -287,7 +286,7 @@ extern "C" void trace_hash_access(ah_table * tbl, hash_object hash_val, unsigned
              *  analysis_set = entry_set_t(analysis_vec.begin(),analysis_vec.end());
              */
             for (const auto &e: analysis_vec)
-                ah_set_analysis_bit(e.table_ptr,e.hash_val,e.offset,1);
+                ah_set_analysis_bit(e.table_ptr,e.entry_index,1);
             count_down = analysis_stage_time;
         } else {
             if(debug) {
@@ -305,7 +304,7 @@ extern "C" void trace_hash_access(ah_table * tbl, hash_object hash_val, unsigned
             timestamp_map.clear();
 
             for(const auto &e: analysis_vec)
-                ah_set_analysis_bit(e.table_ptr,e.hash_val,e.offset,0);
+                ah_set_analysis_bit(e.table_ptr,e.entry_index,0);
 
             /*excluded_set.clear();*/
 
@@ -320,7 +319,7 @@ extern "C" void trace_hash_access(ah_table * tbl, hash_object hash_val, unsigned
 
 
 
-        hash_t entry(tbl,hash_val,offset);
+        hash_t entry(tbl,entry_index);
 
         if(analysis_set_sampling) {
 
