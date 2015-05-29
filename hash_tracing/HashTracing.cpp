@@ -14,8 +14,8 @@
  */
 
 std::ofstream err("debug.out");
-bool debug = false;
-bool print = false;
+bool debug = true;
+bool print = true;
 bool layout = true;
 
 
@@ -120,7 +120,7 @@ extern "C" void init_affinity_analysis()
     print = true;
   }
 
-  if((e = getenv("ST_HASH_ANALYSIS_SIZE")))
+  if((e = getenv("ST_HASH_ANALYSIS_SAMPLE_SIZE")))
     analysis_set_size = atoi(e);
   else /* default value; just to make sure it will be working for more than 1*/
     analysis_set_size = 2;
@@ -182,6 +182,7 @@ void add_compress_update(const hash_t& entry, bool analysis)
 
   if(analysis)
   {
+    /*IMPORTANT: this will call the constructor of window_t */
     window_list.emplace_front(entry); /* remember to set the capacity as well */
     auto res = affinity_map.emplace(entry,0);
     res.first->second.potential_windows++;
