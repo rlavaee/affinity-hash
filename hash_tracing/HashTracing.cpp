@@ -284,7 +284,7 @@ compress:
 }
 
 
-extern "C" void trace_hash_access(ah_table * tbl, int object_id, bool analysis_bit)
+extern "C" void trace_hash_access(ah_table * tbl, ptrdiff_t entry_index, bool analysis_bit)
 {
 
   /*
@@ -318,7 +318,7 @@ extern "C" void trace_hash_access(ah_table * tbl, int object_id, bool analysis_b
        *  analysis_set = entry_set_t(analysis_vec.begin(),analysis_vec.end());
        */
       for (const auto &e: analysis_vec)
-        ah_set_analysis_bit(e.tbl,e.object_id,1);
+        ah_set_analysis_bit(e.table_ptr,e.entry_index,1);
       count_down = analysis_stage_time;
     }
     else
@@ -339,7 +339,7 @@ extern "C" void trace_hash_access(ah_table * tbl, int object_id, bool analysis_b
       timestamp_map.clear();
 
       for(const auto &e: analysis_vec)
-        ah_set_analysis_bit(e.tbl,e.object_id,0);
+        ah_set_analysis_bit(e.table_ptr,e.entry_index,0);
 
       /*excluded_set.clear();*/
 
@@ -356,7 +356,7 @@ extern "C" void trace_hash_access(ah_table * tbl, int object_id, bool analysis_b
 
 
 
-    hash_t entry(tbl,object_id);
+    hash_t entry(tbl,entry_index);
 
     if(analysis_set_sampling)
     {
@@ -401,25 +401,25 @@ void remove_table_analysis(ah_table * tbl)
   }
 }
 
-void remove_entry(ah_table * tbl, int object_id)
+void remove_entry(ah_table * tbl, ptrdiff_t entry_index)
 {
-  global_remove_set.push_back(hash_t(tbl,object_id));
+  global_remove_set.insert(hash_t(tbl,entry_index));
 }
 
 void find_affinity_layout(){
-  std::vector<wcount_pair_t> all_wcount_pairs;
+  std::vector<affinity_pair_t> all_affinity_pairs;
 
   for(const auto& all_wcount_pair: affinity_map){
     auto le = all_wcount_pair.first;
     auto& all_wcount = all_wcount_pair.second;
     for(const auto& wcount_pair: all_wcount.wcount_map){
       auto re = wcount_pair.first;
-      uint32_t affinity = wcount_pair.second.affinity();
-      all_wcount_pairs.push_back(affinity_pair(le,re,affinity));
+      uint32_t affinity = wcount_pair.second.get_affinity();
+      all_affinity_pairs.push_back(affinity_pair_t(le,re,affinity));
     }
   }
 
-  std::sort(all_wcount_pairs.begin(),all_wcount_pairs.end());
-  for(const auto& wcount_pair: all_wcount_pairs)
-    err << wcount_pair << "\n";
+  std::sort(all_affinity_pairs.begin(),all_affinity_pairs.end());
+  for(const auto& affinity_pair: all_affinity_pairs)
+    err << affinity_pair << "\n";
 }

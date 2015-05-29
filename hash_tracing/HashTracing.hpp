@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <unordered_map>
 #include <vector>
+#include <numeric>
 
 /*
 #ifdef NOT_RUBY
@@ -16,10 +17,10 @@
 #include "ruby/ruby.h"
 #endif
 */
-#include "../hamt.h"
+#include "../hash_table.h"
 
 
-typedef std::pair<hash_object,unsigned> ah_map_id;
+typedef std::pair<ptrdiff_t,unsigned> ah_map_id;
 
 typedef uint16_t wsize_t;
 wsize_t max_fpdist;
@@ -33,17 +34,17 @@ struct hash_t
 {
   ah_table *table_ptr;
 
-  int object_id;
+  ptrdiff_t entry_index;
 
-  hash_t() {};
+  hash_t() {}
 
-  hash_t(ah_table *a, int b): table_ptr(a), object_id(b), {};
+  hash_t(ah_table *a, int b): table_ptr(a), entry_index(b) {}
 
-  hash_t(const hash_t &hentry): table_ptr(hentry.table_ptr), object_id(hentry.object_id) {};
+  hash_t(const hash_t &hentry): table_ptr(hentry.table_ptr), entry_index(hentry.entry_index) {}
 
   bool operator == (const hash_t &rhs) const
   {
-    return table_ptr==rhs.table_ptr && object_id==rhs.object_id;
+    return table_ptr==rhs.table_ptr && entry_index==rhs.entry_index;
   }
 
   bool operator < (const hash_t &rhs) const
@@ -53,7 +54,7 @@ struct hash_t
     else if(table_ptr > rhs.table_ptr)
       return false;
 
-    if(object_id < rhs.object_id)
+    if(entry_index < rhs.entry_index)
       return true;
 
     return false;
@@ -62,7 +63,7 @@ struct hash_t
 
   friend std::ostream& operator << (std::ostream& out, const hash_t& obj)
   {
-    out << "(" << std::setbase(16) << obj.table_ptr << ", " << obj.object_id << ")" << std::setbase(10);
+    out << "(" << std::setbase(16) << obj.table_ptr << ", " << obj.entry_index << ")" << std::setbase(10);
     return out;
   }
 };
@@ -72,7 +73,7 @@ struct hash_t_hash
   size_t operator()(hash_t const& hentry) const
   {
     size_t const h1 ( std::hash<ah_table*>()(hentry.table_ptr) );
-    size_t const h2 ( std::hash<hash_object>()(hentry.object_id) );
+    size_t const h2 ( std::hash<ptrdiff_t>()(hentry.entry_index) );
     return h1 ^ ((h2 << 1) << 1);
   }
 };
@@ -130,8 +131,8 @@ struct wcount_t
     return out;
   }
 
-  uint32_t affinity(){
-    return std::accumulate(common_windows.begin(),common_windows.end());
+  uint32_t get_affinity() const{
+    return std::accumulate(common_windows.begin(),common_windows.end(),0);
   }
 
 };
@@ -299,20 +300,19 @@ uint32_t hist_pair_add (const uint32_t psum, const hist_pair_t &e)
   return psum+e.second;
 }
 
-struct wcount_pair_t {
+struct affinity_pair_t {
   hash_t lentry, rentry;
-  wcount_t wcount;
   uint32_t affinity;
 
-  wcount_pair_t(hash_t le, hash_t re, uint32_t affinity): lentry(le), rentry(re), affinity(affinity){}
+  affinity_pair_t(hash_t le, hash_t re, uint32_t affinity): lentry(le), rentry(re), affinity(affinity){}
 
-  bool operator < (const wcount_pair_t wcount_pair) const {
-    return (affinity < wcount_pair.affinity);
+  bool operator < (const affinity_pair_t affinity_pair) const {
+    return (affinity < affinity_pair.affinity);
   }
 
-  friend std::ostream& operator << (std::ostream& out, const wcount_pair_t wcount_pair)
+  friend std::ostream& operator << (std::ostream& out, const affinity_pair_t affinity_pair)
   {
-    out << "[" << wcount_pair.lentry << "," << wcount_pair.rentry << "]:" << wcount_pair.affinity;
+    out << "[" << affinity_pair.lentry << "," << affinity_pair.rentry << "]:" << affinity_pair.affinity;
     return out;
   }
 
@@ -323,6 +323,6 @@ void find_affinity_layout();
 void affinity_at_exit_handler();
 extern "C" void init_affinity_analysis();
 void update_stage_affinity(const hash_t&, const window_list_t::iterator&);
-extern "C" void trace_hash_access(ah_table *, hash_object, unsigned, bool);
+extern "C" void trace_hash_access(ah_table *, ptrdiff_t, bool);
 extern "C" void remove_table_analysis(ah_table *);
-extern "C" void remove_entry(ah_table *, int object_id);
+extern "C" void remove_entry(ah_table *, ptrdiff_t entry_index);
