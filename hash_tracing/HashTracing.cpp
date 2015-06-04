@@ -14,9 +14,10 @@
  */
 
 std::ofstream err("debug.out");
-bool debug = true;
-bool print = true;
-bool layout = true;
+std::ofstream layout_os("layout.out");
+bool DEBUG = true;
+bool PRINT = true;
+bool LAYOUT = true;
 
 
 /*
@@ -76,10 +77,10 @@ void save_affinity_into_file(const char * affinity_file_path)
 
 void affinity_at_exit_handler()
 {
-  if(print)
+  if(PRINT)
     save_affinity_into_file("graph.babc");
 
-  if(layout)
+  if(LAYOUT)
     find_affinity_layout();
 }
 
@@ -110,14 +111,14 @@ extern "C" void init_affinity_analysis()
 
   if(e && *e)   /*Set and not empty*/
   {
-    debug = true;
+    DEBUG = true;
   }
 
   e = getenv("ST_HASH_PRINT");
 
   if(e && *e)   /*Set and not empty*/
   {
-    print = true;
+    PRINT = true;
   }
 
   if((e = getenv("ST_HASH_ANALYSIS_SAMPLE_SIZE")))
@@ -305,7 +306,7 @@ extern "C" void trace_hash_access(ah_table * tbl, ptrdiff_t entry_index, bool an
 
     if(analysis_set_sampling)
     {
-      if(debug)
+      if(DEBUG)
       {
         err << "End of the sampling stage, analyzed entries are:\n";
         for(const auto &a_entry : analysis_vec)
@@ -324,7 +325,7 @@ extern "C" void trace_hash_access(ah_table * tbl, ptrdiff_t entry_index, bool an
     }
     else
     {
-      if(debug)
+      if(DEBUG)
       {
         err << "Analysis stage finishes now!\n";
         err.flush();
@@ -379,7 +380,7 @@ extern "C" void trace_hash_access(ah_table * tbl, ptrdiff_t entry_index, bool an
     }
     else
     {
-      if(debug)
+      if(DEBUG)
         dump_window_list(err,window_list);
 
       add_compress_update(entry,analysis_bit);
@@ -407,7 +408,7 @@ void remove_entry(ah_table * tbl, ptrdiff_t entry_index)
   global_remove_set.insert(hash_t(tbl,entry_index));
 }
 
-void find_affinity_layout(){
+std::vector<Layout<hash_t>> find_affinity_layout(){
   std::vector<affinity_pair_t> all_affinity_pairs;
 
   for(const auto& all_wcount_pair: affinity_map){
@@ -420,7 +421,29 @@ void find_affinity_layout(){
     }
   }
 
-  std::sort(all_affinity_pairs.begin(),all_affinity_pairs.end());
+  std::sort(all_affinity_pairs.rbegin(),all_affinity_pairs.rend());
   for(const auto& affinity_pair: all_affinity_pairs)
     err << affinity_pair << "\n";
+
+  for(const auto& affinity_pair: all_affinity_pairs){
+    auto lLayoutPair = Layout<hash_t>::LayoutMap.emplace(std::piecewise_construct, 
+							std::forward_as_tuple(affinity_pair.lentry), 
+							std::forward_as_tuple((Layout<hash_t>*)NULL));
+    if(lLayoutPair.second)
+      lLayoutPair.first->second = new Layout<hash_t>(affinity_pair.lentry);
+
+    auto rLayoutPair = Layout<hash_t>::LayoutMap.emplace(std::piecewise_construct, 
+							std::forward_as_tuple(affinity_pair.rentry), 
+							std::forward_as_tuple((Layout<hash_t>*)NULL));
+
+    if(rLayoutPair.second)
+      rLayoutPair.first->second = new Layout<hash_t>(affinity_pair.rentry);
+
+    if(rLayoutPair.first->second != lLayoutPair.first->second){
+      rLayoutPair.first->second->merge(lLayoutPair.first->second);
+    }
+  }
+
+  return Layout<hash_t>::getLayouts();
+
 }

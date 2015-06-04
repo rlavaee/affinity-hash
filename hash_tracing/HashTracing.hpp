@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <vector>
 #include <numeric>
+#include <deque>
 
 /*
 #ifdef NOT_RUBY
@@ -68,19 +69,37 @@ struct hash_t
   }
 };
 
-struct hash_t_hash
-{
-  size_t operator()(hash_t const& hentry) const
+namespace std {
+  template <> struct hash<hash_t>
   {
-    size_t const h1 ( std::hash<ah_table*>()(hentry.table_ptr) );
-    size_t const h2 ( std::hash<ptrdiff_t>()(hentry.entry_index) );
-    return h1 ^ ((h2 << 1) << 1);
-  }
-};
+    size_t              
+      operator()(const hash_t& __val) const noexcept
+      {
+	size_t const h1 ( std::hash<ah_table*>()(__val.table_ptr) );
+	size_t const h2 ( std::hash<ptrdiff_t>()(__val.entry_index) );
+	return h1 ^ ((h2 << 1) << 1);
+      }
+  };
 
-typedef std::unordered_map<hash_t, uint32_t, hash_t_hash> timestamp_map_t;
+  template <> struct hash<const hash_t>
+  {
+    size_t              
+      operator()(const hash_t& __val) const noexcept
+      {
+	size_t const h1 ( std::hash<ah_table*>()(__val.table_ptr) );
+	size_t const h2 ( std::hash<ptrdiff_t>()(__val.entry_index) );
+	return h1 ^ ((h2 << 1) << 1);
+      }
+  };
 
-typedef std::unordered_set<hash_t, hash_t_hash> entry_set_t;
+}
+
+
+
+
+typedef std::unordered_map<const hash_t, uint32_t> timestamp_map_t;
+
+typedef std::unordered_set<const hash_t> entry_set_t;
 typedef std::vector <hash_t> entry_vec_t;
 typedef std::list<hash_t> entry_list_t;
 
@@ -137,7 +156,7 @@ struct wcount_t
 
 };
 
-typedef std::unordered_map <const hash_t, wcount_t, hash_t_hash > wcount_map_t;
+typedef std::unordered_map <const hash_t, wcount_t> wcount_map_t;
 
 
 
@@ -168,7 +187,7 @@ struct all_wcount_t
 
 };
 
-typedef std::unordered_map <const hash_t, all_wcount_t , hash_t_hash > all_wcount_map_t;
+typedef std::unordered_map <const hash_t, all_wcount_t> all_wcount_map_t;
 
 std::ostream& operator << (std::ostream& out, const all_wcount_map_t& m)
 {
@@ -229,7 +248,7 @@ struct window_t
     for(const auto &e: other.owners)
     {
       if(std::find(eit_begin,eit_end,e)==eit_end)
-        owners.push_back(e);
+	owners.push_back(e);
     }
   }
 
@@ -239,7 +258,7 @@ struct window_t
     out << "entries: ";
     /*for(const auto &entry: obj.partial_entry_list)
       out << entry << " ";
-    		*/
+      */
     out << "\nowners: " ;
 
     for(const auto& entry: obj.owners)
@@ -275,8 +294,8 @@ struct wlist_it_pair_t
     :window_it (wit), entry_it (eit) {}
 };
 
-typedef std::unordered_map <const hash_t, window_list_t::iterator, hash_t_hash > window_iterator_map_t;
-typedef std::unordered_map <const hash_t, entry_list_t::iterator, hash_t_hash > entry_iterator_map_t;
+typedef std::unordered_map <const hash_t, window_list_t::iterator> window_iterator_map_t;
+typedef std::unordered_map <const hash_t, entry_list_t::iterator > entry_iterator_map_t;
 
 
 
@@ -307,7 +326,7 @@ struct affinity_pair_t {
   affinity_pair_t(hash_t le, hash_t re, uint32_t affinity): lentry(le), rentry(re), affinity(affinity){}
 
   bool operator < (const affinity_pair_t affinity_pair) const {
-    return (affinity < affinity_pair.affinity);
+    return (affinity > affinity_pair.affinity);
   }
 
   friend std::ostream& operator << (std::ostream& out, const affinity_pair_t affinity_pair)
@@ -319,7 +338,54 @@ struct affinity_pair_t {
 };
 
 
-void find_affinity_layout();
+template <class T> 
+class Layout: public std::deque <T> {
+  public:
+    static std::unordered_map <T, Layout<T>*> LayoutMap;
+
+    bool dumped = false;
+
+    Layout(const T& fentry): std::deque<T>() {
+      this->push_back(fentry);
+    }
+
+    void merge(Layout* layout){
+      for(const auto& entry: *layout){
+	this->push_back(entry);
+	LayoutMap[entry]=this;
+      }
+      delete layout;
+    }
+
+    friend std::ostream& operator << (std::ostream& out, const Layout& layout){
+      for(T entry: layout)
+	out << entry << " ";
+
+      out << "\n";
+      return out;
+    }
+
+    static std::vector<Layout> getLayouts(){
+      std::vector<Layout> layouts;
+      for(auto layout_pair: LayoutMap)
+	if(!layout_pair.second->dumped){
+	  layouts.push_back(*layout_pair.second);
+	  //layout_os << *layout_pair.second;
+	  layout_pair.second->dumped = true;
+	}
+
+      return layouts;
+
+    }
+
+};
+
+template <class T>  std::unordered_map <T, Layout<T> *> Layout<T>::LayoutMap;
+
+
+
+
+extern std::vector<Layout<hash_t>> find_affinity_layout();
 void affinity_at_exit_handler();
 extern "C" void init_affinity_analysis();
 void update_stage_affinity(const hash_t&, const window_list_t::iterator&);
