@@ -97,14 +97,11 @@ namespace std {
 
 
 
-typedef std::unordered_map<const hash_t, uint32_t> timestamp_map_t;
+template <class T> using timestamp_map_t = std::unordered_map<const T, uint32_t>;
 
-typedef std::unordered_set<const hash_t> entry_set_t;
-typedef std::vector <hash_t> entry_vec_t;
-typedef std::list<hash_t> entry_list_t;
-
-typedef std::pair<hash_t,uint32_t> hist_pair_t;
-typedef std::vector< hist_pair_t > hist_vec_t;
+template <class T> using entry_set_t = std::unordered_set<const T>;
+template <class T> using entry_vec_t = std::vector <T>;
+template <class T> using entry_list_t = std::list<T>;
 
 struct wcount_t
 {
@@ -156,18 +153,18 @@ struct wcount_t
 
 };
 
-typedef std::unordered_map <const hash_t, wcount_t> wcount_map_t;
+template <class T> using wcount_map_t =  std::unordered_map <const T, wcount_t>;
 
 
-
+template <class T>
 struct all_wcount_t
 {
   uint32_t potential_windows;
-  wcount_map_t wcount_map;
+  wcount_map_t<T> wcount_map;
   all_wcount_t(uint32_t _pw): potential_windows(_pw) {}
   all_wcount_t(): potential_windows(0)
   {
-    wcount_map = wcount_map_t();
+    wcount_map = wcount_map_t<T>();
   }
 
   friend std::ostream& operator << (std::ostream& out, const all_wcount_t& obj)
@@ -187,9 +184,10 @@ struct all_wcount_t
 
 };
 
-typedef std::unordered_map <const hash_t, all_wcount_t> all_wcount_map_t;
+template <class T> using all_wcount_map_t = std::unordered_map <const T, all_wcount_t<T>>;
 
-std::ostream& operator << (std::ostream& out, const all_wcount_map_t& m)
+template <class T>
+std::ostream& operator << (std::ostream& out, const all_wcount_map_t<T>& m)
 {
   for (const auto& all_wcount_pair: m)
   {
@@ -200,9 +198,10 @@ std::ostream& operator << (std::ostream& out, const all_wcount_map_t& m)
   return out;
 }
 
+template <class T>
 struct window_t
 {
-  entry_vec_t owners;
+  entry_vec_t<T> owners;
   wsize_t wsize;
   wsize_t capacity;
   uint32_t start;
@@ -213,7 +212,7 @@ struct window_t
     owners.reserve(analysis_set_size);
   }
 
-  window_t(const hash_t& entry):wsize(1), capacity(1), start(timestamp)
+  window_t(const T& entry):wsize(1), capacity(1), start(timestamp)
   {
     owners.reserve(analysis_set_size);
     owners.push_back(entry);
@@ -224,13 +223,13 @@ struct window_t
     owners.clear();
   }
 
-  void push_front(const hash_t& entry)
+  void push_front(const T& entry)
   {
     wsize++;
   }
 
 
-  void erase(const entry_list_t::iterator& it)
+  void erase(const typename entry_list_t<T>::iterator& it)
   {
     //partial_entry_list.erase(it);
     wsize--;
@@ -243,8 +242,8 @@ struct window_t
 
   void merge_owners(const window_t& other)
   {
-    entry_vec_t::iterator eit_begin = owners.begin();
-    entry_vec_t::iterator eit_end = owners.end();
+    typename entry_vec_t<T>::iterator eit_begin = owners.begin();
+    typename entry_vec_t<T>::iterator eit_end = owners.end();
     for(const auto &e: other.owners)
     {
       if(std::find(eit_begin,eit_end,e)==eit_end)
@@ -270,10 +269,12 @@ struct window_t
 
 };
 
-typedef std::list<window_t> window_list_t;
+//typedef std::list<window_t> window_list_t;
 
+template <class T> using window_list_t = std::list<window_t<T>>;
 
-std::ostream& operator << (std::ostream& out, const window_list_t& wlist)
+template <class T>
+std::ostream& operator << (std::ostream& out, const window_list_t<T>& wlist)
 {
   for (const auto& window: wlist)
   {
@@ -282,48 +283,31 @@ std::ostream& operator << (std::ostream& out, const window_list_t& wlist)
   return out;
 }
 
-
-struct wlist_it_pair_t
+template <class T>
+class wlist_it_pair_t
 {
-  window_list_t::iterator window_it;
-  entry_list_t::iterator entry_it;
+  typename window_list_t<T>::iterator window_it;
+  typename entry_list_t<T>::iterator entry_it;
 
   wlist_it_pair_t() {}
 
-  wlist_it_pair_t(const window_list_t::iterator& wit, const entry_list_t::iterator& eit)
+  wlist_it_pair_t(const typename window_list_t<T>::iterator& wit, const typename entry_list_t<T>::iterator& eit)
     :window_it (wit), entry_it (eit) {}
 };
 
-typedef std::unordered_map <const hash_t, window_list_t::iterator> window_iterator_map_t;
-typedef std::unordered_map <const hash_t, entry_list_t::iterator > entry_iterator_map_t;
+template <class T> using window_iterator_map_t = std::unordered_map <const T, typename window_list_t<T>::iterator>;
+template <class T> using entry_iterator_map_t = std::unordered_map <const T, typename entry_list_t<T>::iterator>;
 
 
 
 
-
-hist_pair_t get_hist_entry (const std::pair<const hash_t, wcount_t> &p)
-{
-  return hist_pair_t (p.first,p.second.all_windows);
-}
-
-/*
- * We need to sort in descending order. Thus, we flip the order
- */
-bool hist_pair_cmp (const hist_pair_t &e1, const hist_pair_t &e2)
-{
-  return (e1.second > e2.second);
-}
-
-uint32_t hist_pair_add (const uint32_t psum, const hist_pair_t &e)
-{
-  return psum+e.second;
-}
-
-struct affinity_pair_t {
-  hash_t lentry, rentry;
+template <class T>
+class affinity_pair_t {
+  public:
+  T lentry, rentry;
   uint32_t affinity;
 
-  affinity_pair_t(hash_t le, hash_t re, uint32_t affinity): lentry(le), rentry(re), affinity(affinity){}
+  affinity_pair_t(T le, T re, uint32_t affinity): lentry(le), rentry(re), affinity(affinity){}
 
   bool operator < (const affinity_pair_t affinity_pair) const {
     return (affinity > affinity_pair.affinity);
@@ -388,7 +372,7 @@ template <class T>  std::unordered_map <T, Layout<T> *> Layout<T>::LayoutMap;
 extern std::vector<Layout<hash_t>> find_affinity_layout();
 void affinity_at_exit_handler();
 extern "C" void init_affinity_analysis();
-void update_stage_affinity(const hash_t&, const window_list_t::iterator&);
+template <class T> void update_stage_affinity(const hash_t&, const typename window_list_t<T>::iterator&);
 extern "C" void trace_hash_access(ah_table *, ptrdiff_t, bool);
 extern "C" void remove_table_analysis(ah_table *);
 extern "C" void remove_entry(ah_table *, ptrdiff_t entry_index);

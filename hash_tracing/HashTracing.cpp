@@ -27,39 +27,39 @@ bool analysis_set_sampling;
 uint32_t count_down;
 const uint32_t analysis_sampling_time = 1 << 8;
 const uint32_t analysis_stage_time = 1 << 12;
-entry_vec_t analysis_vec;
-entry_set_t analysis_set;
-entry_set_t excluded_set;
-entry_set_t global_remove_set;
+entry_vec_t<hash_t> analysis_vec;
+entry_set_t<hash_t> analysis_set;
+entry_set_t<hash_t> excluded_set;
+entry_set_t<hash_t> global_remove_set;
 
 
 
 /*
  * Affinity data structures
  */
-all_wcount_map_t affinity_map;
-all_wcount_map_t stage_affinity_map;
+all_wcount_map_t<hash_t> affinity_map;
+all_wcount_map_t<hash_t> stage_affinity_map;
 
 
 /*
  * Trace list data structures
  */
 wsize_t window_list_size;
-window_list_t window_list;
-window_iterator_map_t window_iterator_map;
-entry_iterator_map_t entry_iterator_map;
+window_list_t<hash_t> window_list;
+window_iterator_map_t<hash_t> window_iterator_map;
+entry_iterator_map_t<hash_t> entry_iterator_map;
 
-timestamp_map_t timestamp_map;
+timestamp_map_t<hash_t> timestamp_map;
 const int sampleMask = 0x0;
 
 
 /*
  * Iterators
  */
-window_list_t::iterator window_list_it;
-entry_list_t::iterator entry_list_it;
-window_list_t::iterator window_it;
-window_iterator_map_t::iterator window_found;
+window_list_t<hash_t>::iterator window_list_it;
+entry_list_t<hash_t>::iterator entry_list_it;
+window_list_t<hash_t>::iterator window_it;
+window_iterator_map_t<hash_t>::iterator window_found;
 
 /*
  * Saves the affinity data into a file
@@ -85,8 +85,8 @@ void affinity_at_exit_handler()
 }
 
 
-
-void dump_window_list (std::ostream &out, window_list_t &wlist)
+template <class T>
+void dump_window_list (std::ostream &out, window_list_t<T> &wlist)
 {
 
   out << "trace list:------------------------------------------\n" ;
@@ -163,7 +163,8 @@ extern "C" void init_affinity_analysis()
    }
    */
 
-void update_affinity(const entry_vec_t& entry_vec, const hash_t& entry, int fpdist_ind)
+template <class T>
+void update_affinity(const entry_vec_t<T>& entry_vec, const T& entry, int fpdist_ind)
 {
   for(const auto &a_entry : entry_vec)
   {
@@ -174,12 +175,12 @@ void update_affinity(const entry_vec_t& entry_vec, const hash_t& entry, int fpdi
 }
 
 
-
-void add_compress_update(const hash_t& entry, bool analysis)
+template <class T>
+void add_compress_update(const T& entry, bool analysis)
 {
 
 
-  window_list_t::iterator window_it = window_list.begin();
+  typename window_list_t<T>::iterator window_it = window_list.begin();
 
   if(analysis)
   {
@@ -216,7 +217,7 @@ void add_compress_update(const hash_t& entry, bool analysis)
   }
 
 
-  window_list_t::iterator prev_window_it;
+  typename window_list_t<T>::iterator prev_window_it;
   wsize_t exp_fpdist = 1;
   int exp_fpdist_ind = 0;
 
@@ -393,7 +394,7 @@ extern "C" void trace_hash_access(ah_table * tbl, ptrdiff_t entry_index, bool an
 
 void remove_table_analysis(ah_table * tbl)
 {
-  entry_vec_t::iterator it=analysis_vec.begin();
+  entry_vec_t<hash_t>::iterator it=analysis_vec.begin();
   while(it!=analysis_vec.end())
   {
     if(it->table_ptr==tbl)
@@ -409,7 +410,7 @@ void remove_entry(ah_table * tbl, ptrdiff_t entry_index)
 }
 
 std::vector<Layout<hash_t>> find_affinity_layout(){
-  std::vector<affinity_pair_t> all_affinity_pairs;
+  std::vector<affinity_pair_t<hash_t>> all_affinity_pairs;
 
   for(const auto& all_wcount_pair: affinity_map){
     auto le = all_wcount_pair.first;
@@ -417,7 +418,7 @@ std::vector<Layout<hash_t>> find_affinity_layout(){
     for(const auto& wcount_pair: all_wcount.wcount_map){
       auto re = wcount_pair.first;
       uint32_t affinity = wcount_pair.second.get_affinity();
-      all_affinity_pairs.push_back(affinity_pair_t(le,re,affinity));
+      all_affinity_pairs.push_back(affinity_pair_t<hash_t>(le,re,affinity));
     }
   }
 
@@ -440,7 +441,10 @@ std::vector<Layout<hash_t>> find_affinity_layout(){
       rLayoutPair.first->second = new Layout<hash_t>(affinity_pair.rentry);
 
     if(rLayoutPair.first->second != lLayoutPair.first->second){
-      rLayoutPair.first->second->merge(lLayoutPair.first->second);
+      if(rLayoutPair.first->second->size() > lLayoutPair.first->second->size())
+      	rLayoutPair.first->second->merge(lLayoutPair.first->second);
+      else
+      	lLayoutPair.first->second->merge(rLayoutPair.first->second);
     }
   }
 
