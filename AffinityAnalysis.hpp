@@ -18,8 +18,9 @@
 /** Types **/
 using entry_index_t = ptrdiff_t;
 using wsize_t       = uint16_t;
+using timestamp_t   = uint32_t;
 
-template <class T> using timestamp_map_t = std::unordered_map<const T, uint32_t>;
+template <class T> using timestamp_map_t = std::unordered_map<const T, timestamp_t>;
 template <class T> using entry_set_t = std::unordered_set<const T>;
 template <class T> using entry_vec_t = std::vector<T>;
 template <class T> using entry_list_t = std::list<T>;
@@ -65,11 +66,14 @@ template <class T> struct hash<const entry_t<T>> {
 }
 
 struct wcount_t {
+  bool updated_last_reorder_stage;
+  uint32_t reorder_stages_missed;
   uint32_t excluded_windows;
+  // Smallest to largest.
   std::vector<uint32_t> common_windows; // Histogram of window length.
   uint32_t all_windows;
 
-  wcount_t(): excluded_windows(0), all_windows(0) {
+  wcount_t(): excluded_windows(0), all_windows(0), updated_last_reorder_stage(true) {
     common_windows = std::vector<uint32_t>(max_fpdist_ind + 1); // G
   }
 
@@ -103,11 +107,23 @@ struct wcount_t {
     return out;
   }
 
-  uint32_t get_affinity() const {
-    // TODO: Weight window sizes.
-    return std::accumulate(common_windows.begin(), common_windows.end(), 0);
+  uint32_t get_affinity() {
+    if(!updated_last_reorder_stage)
+      ++reorder_stages_missed;
+
+    updated_last_reorder_stage = false;
+
+    uint32_t a = 0;
+    for(uint32_t i = 0; i < common_windows.size(); ++i)
+      a += ((common_windows.size() - i) * common_windows[i]) >> reorder_stages_missed;
+
+    return a;
+    //return std::accumulate(common_windows.begin(), common_windows.end(), 0);
   }
 
+  void accessed() { updated_last_reorder_stage = true; reorder_stages_missed = 0; }
+
+private:
 };
 
 template <class T> using wcount_map_t = std::unordered_map<const T, wcount_t>;
@@ -153,14 +169,14 @@ struct window_t {
   entry_vec_t<T> owners;
   wsize_t wsize;
   wsize_t capacity; // NOT USED.
-  uint32_t start;
+  timestamp_t start;
   //entry_list_t partial_entry_list;
 
   window_t(): wsize(0) {
     owners.reserve(analysis_set_size);
   }
 
-  window_t(const T& entry, uint32_t timestamp): wsize(1), capacity(1), start(timestamp) {
+  window_t(const T& entry, timestamp_t timestamp): wsize(1), capacity(1), start(timestamp) {
     owners.reserve(analysis_set_size);
     owners.push_back(entry);
   }
@@ -223,7 +239,6 @@ class Analysis {
 
  public:
   Analysis(T *tbl): table_ptr(tbl) {
-  // : err("debug.out") {
     srand(time(NULL));
 
     // get prepared for the first analysis_set_sampling round
@@ -335,7 +350,7 @@ class Analysis {
   bool PRINT = false;
 
   // Sampling settings
-  uint32_t timestamp;
+  timestamp_t timestamp;
   bool analysis_set_sampling;
   uint32_t count_down;
   static constexpr uint32_t analysis_sampling_time = 1 << 8;
@@ -369,6 +384,7 @@ class Analysis {
       wcount_t& ref = affinity_map[a_entry].wcount_map[entry];
       ref.common_windows.at(fpdist_ind)++;
       ref.all_windows++;
+      ref.accessed(); // Note that it's been accessed this reorder stage.
     }
   }
 
@@ -516,17 +532,17 @@ class Layout {
     }
   };
 
-  Layout(const Analysis<T, D>& a) : affinity_map(a.affinity_map) {}
+  Layout(Analysis<T, D>& a) : affinity_map(a.affinity_map) {}
 
   std::vector<layout_t> find_affinity_layout() {
     layout_map.clear();
 
     std::vector<affinity_pair_t> all_affinity_pairs;
 
-    for (const auto& all_wcount_pair : affinity_map) {
+    for (auto& all_wcount_pair : affinity_map) {
       auto le = all_wcount_pair.first;
       auto& all_wcount = all_wcount_pair.second;
-      for (const auto& wcount_pair : all_wcount.wcount_map) {
+      for (auto& wcount_pair : all_wcount.wcount_map) {
         auto re = wcount_pair.first;
         uint32_t affinity = wcount_pair.second.get_affinity();
         all_affinity_pairs.push_back(affinity_pair_t(le, re, affinity));
@@ -575,7 +591,7 @@ class Layout {
   }
 
  private:
-  const all_wcount_map_t<entry_t>& affinity_map;
+  all_wcount_map_t<entry_t>& affinity_map;
   std::unordered_map<entry_t, layout_t*> layout_map;
 };
 
