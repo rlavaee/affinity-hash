@@ -1,10 +1,8 @@
-CXX=gcc
-CXXFLAGS = -O3 -Wall
-LDFLAGS=-L./hash_tracing/
-# -L./hash_tracing/ -Wl,-rpath,$(ORIGIN)/hash_tracing
+CXX=g++
+CXXFLAGS = -O3 -std=c++11 -Wall
 
 test:
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -Wall hash_table.c -o test -lhash_trace
+	$(CXX) $(CXXFLAGS) tests/Test.cpp -o tests/test
 
 clean:
-	-rm test
+	rm test
