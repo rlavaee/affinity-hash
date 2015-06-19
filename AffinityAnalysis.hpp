@@ -32,26 +32,18 @@ uint16_t analysis_set_size;
 // Affinity representation of a hash table entry.
 template<typename T>
 struct entry_t {
-//  T* table_ptr;
   entry_index_t entry_index;
 
   entry_t() {}
-  entry_t(/* T* a, */ entry_index_t b): /* table_ptr(a), */ entry_index(b) {}
-  entry_t(const entry_t& hentry): /* table_ptr(hentry.table_ptr), */ entry_index(hentry.entry_index) {}
+  entry_t(entry_index_t b): entry_index(b) {}
+  entry_t(const entry_t& hentry): entry_index(hentry.entry_index) {}
 
   bool operator == (const entry_t& rhs) const {
-    return /*table_ptr == rhs.table_ptr && */ entry_index == rhs.entry_index;
+    return entry_index == rhs.entry_index;
   }
-/*
-  bool operator < (const entry_t& rhs) const {
-    if (table_ptr < rhs.table_ptr) return true;
-    else if (table_ptr > rhs.table_ptr) return false;
-    else if (entry_index < rhs.entry_index) return true;
-    else return false;
-  }
-*/
+
   friend std::ostream& operator << (std::ostream& out, const entry_t& obj) {
-    out << "(" << std::setbase(16) /* << obj.table_ptr << ", " */ << obj.entry_index << ")" << std::setbase(10);
+    out << "(" << std::setbase(16)  << obj.entry_index << ")" << std::setbase(10);
     return out;
   }
 };
@@ -59,18 +51,14 @@ struct entry_t {
 namespace std {
 template <class T> struct hash<entry_t<T>> {
   size_t operator()(const entry_t<T>& __val) const noexcept {
-    // size_t const h1 ( std::hash<T*>()(__val.table_ptr) );
     size_t const h2 ( std::hash<entry_index_t>()(__val.entry_index) );
-    //return h1 ^ ((h2 << 1) << 1);
     return h2;
   }
 };
 
 template <class T> struct hash<const entry_t<T>> {
   size_t operator()(const entry_t<T>& __val) const noexcept {
-    // size_t const h1 ( std::hash<T*>()(__val.table_ptr) );
     size_t const h2 ( std::hash<entry_index_t>()(__val.entry_index) );
-    // return h1 ^ ((h2 << 1) << 1);
     return h2;
   }
 };
@@ -297,7 +285,6 @@ class Analysis {
           err.flush();
         }
         // Clear the exluded entry set and the analysis entry set
-        //analysis_set.clear();
         analysis_vec.clear();
         window_list.clear();
         timestamp_map.clear();
@@ -305,15 +292,12 @@ class Analysis {
         for (const auto& e : analysis_vec)
           table_ptr->entries[e.entry_index].set_analysis_bit(0);
 
-        //excluded_set.clear();
-
         // Get ready for the next analysis_set_sampling round
         analysis_set_sampling = true;
         count_down = analysis_sampling_time;
       }
 
     } else {
-      // entry_t entry(tbl, entry_index);
       entry_t entry(entry_index);
 
       if (analysis_set_sampling) {
@@ -346,7 +330,7 @@ class Analysis {
   T const * const table_ptr;
 
   // Verbosity setting
-  static std::ostream &err; // layout_os;
+  static std::ostream &err;
   bool DEBUG = false;
   bool PRINT = false;
 
@@ -393,8 +377,8 @@ class Analysis {
     typename window_list_t<entry_t>::iterator window_it = window_list.begin();
 
     if (analysis) {
-      /*IMPORTANT: this will call the constructor of window_t */
-      window_list.emplace_front(entry, timestamp); /* remember to set the capacity as well */
+      // NOTE: this will call the constructor of window_t
+      window_list.emplace_front(entry, timestamp); // remember to set the capacity as well
       auto res = affinity_map.emplace(entry, 0);
       res.first->second.potential_windows++;
     }
@@ -534,7 +518,6 @@ class Layout {
 
   Layout(const Analysis<T, D>& a) : affinity_map(a.affinity_map) {}
 
-  // Change this to std::dequeue<D>
   std::vector<layout_t> find_affinity_layout() {
     layout_map.clear();
 

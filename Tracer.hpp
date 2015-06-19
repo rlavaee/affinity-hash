@@ -12,13 +12,8 @@
 template<typename T, typename D>
 class Tracer {
  public:
-  Tracer(T* t) : root(t), analyzer(t), layout(analyzer) {
-    //    init_affinity_analysis();
-  }
-
-  ~Tracer() {
-    //    remove_table_analysis(root);
-  }
+  Tracer(T* t) : root(t), analyzer(t), layout(analyzer) {}
+  ~Tracer() {}
 
   void record(D* data) {
     analyzer.trace_hash_access(data - root->entries, data->get_analysis_bit());
