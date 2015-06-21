@@ -81,7 +81,7 @@ Analysis::Analysis() {
   timestamp = 0;
 }
 
-void Analysis::trace_hash_access(entry_index_t entry_index, bool analysis_bit) {
+void Analysis::trace_hash_access(entry_index_t entry_index) {
   timestamp++;
 
   // Count down and transit into the next stage if count drops to zero.
@@ -101,7 +101,6 @@ void Analysis::trace_hash_access(entry_index_t entry_index, bool analysis_bit) {
       // analysis_set = entry_set_t(analysis_vec.begin(),analysis_vec.end());
       for (const auto& e : analysis_vec)
         analysis_set.insert(e);
-        //table_ptr->entries[e.entry_index].set_analysis_bit(1);
 
       analysis_count_down = analysis_stage_time;
     } else {
@@ -115,9 +114,6 @@ void Analysis::trace_hash_access(entry_index_t entry_index, bool analysis_bit) {
       analysis_set.clear();
       window_list.clear();
       timestamp_map.clear();
-
-      //for (const auto& e : analysis_vec)
-      //  table_ptr->entries[e.entry_index].set_analysis_bit(0);
 
       // Get ready for the next analysis_set_sampling round
       analysis_set_sampling = true;
@@ -171,7 +167,7 @@ std::vector<affinity_pair_t<entry_t>> Analysis::get_affinity_pairs() {
   for_each(decay_map.begin(), decay_map.end(),
     [](decay_map_t<entry_t>::value_type &v) {
       std::pair<bool, uint32_t> &e = v.second;
-      if (!e.first) e.second -= 1;
+      if (!e.first) e.second += 1;
 
       // All affinities should decay if they aren't accessed
       // before get_affinity_pairs() is called again.

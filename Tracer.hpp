@@ -15,7 +15,7 @@ class Tracer {
   ~Tracer() {}
 
   void record(D* data) {
-    analyzer.trace_hash_access(data - root->entries, data->get_analysis_bit());
+    analyzer.trace_hash_access(data - root->entries);
   }
 
   void remove(D* data) {

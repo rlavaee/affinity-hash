@@ -17,7 +17,7 @@
 
 #include "Tracer.hpp"
 
-template<typename V, bool cache_hash, bool trace_accesses>
+template<typename V, bool cache_hash>
 struct ah_entry;
 
 template<typename K, typename V,
@@ -27,7 +27,7 @@ template<typename K, typename V,
          typename Pred = std::equal_to<K>
         >
 class AhMap {
-  using ah_entry = ah_entry<std::pair<K, V>, cache_hash, trace_accesses>;
+  using ah_entry = ah_entry<std::pair<K, V>, cache_hash>;
   using ah_map   = AhMap<K, V, cache_hash, trace_accesses, Hash, Pred>;
 
   static constexpr unsigned AH_EXPAND_FACTOR = 11;
@@ -129,7 +129,7 @@ class AhMap {
     //      less elements slower reorder
 
     std::unordered_map<K, V> collision_map{};
-
+/*
     std::cout << "LINEAR ORDERING:\n";
     auto a = trace.results();
 
@@ -141,7 +141,7 @@ class AhMap {
       std::cout << "(" << std::get<0>(this->entries[e].value) << ", " << std::get<1>(this->entries[e].value) << ")";
     });
 
-
+*/
     std::cout << "\nNON-LINEAR ORDERING:\n";
     auto b = trace.non_linear_results();
     unsigned i = 0;
@@ -234,28 +234,7 @@ class AhMap {
 };
 
 template<typename V>
-struct ah_entry<V, true, true> {
-  V value;
-  ah_entry* next;
-  size_t hash;
-  bool analysis_bit;
-
-  void write_hash(size_t hash) {
-    this->hash = hash;
-  }
-  size_t read_hash() {
-    return hash;
-  }
-  void set_analysis_bit(bool value) {
-    analysis_bit = value;
-  }
-  bool get_analysis_bit() {
-    return analysis_bit;
-  }
-};
-
-template<typename V>
-struct ah_entry<V, true, false> {
+struct ah_entry<V, true> {
   V value;
   ah_entry* next;
   size_t hash;
@@ -266,36 +245,10 @@ struct ah_entry<V, true, false> {
   size_t read_hash() {
     return hash;
   }
-  void set_analysis_bit(bool value) {
-    throw std::logic_error("");
-  }
-  bool get_analysis_bit() {
-    throw std::logic_error("");
-  }
 };
 
 template<typename V>
-struct ah_entry<V, false, true> {
-  V value;
-  ah_entry* next;
-  bool analysis_bit;
-
-  void write_hash(size_t hash) {
-    throw std::logic_error("");
-  }
-  size_t read_hash() {
-    throw std::logic_error("");
-  }
-  void set_analysis_bit(bool value) {
-    analysis_bit = value;
-  }
-  bool get_analysis_bit() {
-    return analysis_bit;
-  }
-};
-
-template<typename V>
-struct ah_entry<V, false, false> {
+struct ah_entry<V, false> {
   V value;
   ah_entry* next;
 
@@ -303,12 +256,6 @@ struct ah_entry<V, false, false> {
     throw std::logic_error("");
   }
   size_t read_hash() {
-    throw std::logic_error("");
-  }
-  void set_analysis_bit(bool value) {
-    throw std::logic_error("");
-  }
-  bool get_analysis_bit() {
     throw std::logic_error("");
   }
 };

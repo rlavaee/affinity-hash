@@ -244,8 +244,6 @@ std::ostream& operator << (std::ostream& out, const window_list_t<T>& wlist) {
   return out;
 }
 
-class Layout;
-
 class Analysis {
   using affinity_pair_t = affinity_pair_t<entry_t>;
 
@@ -253,15 +251,15 @@ class Analysis {
   Analysis();
 
   // TODO: analysis_bit not needed. analysis_vec provides equiv. information.
-  void trace_hash_access(entry_index_t entry_index, bool analysis_bit);
+  void trace_hash_access(entry_index_t entry_index);
 
   void remove_entry(entry_index_t entry_index);
 
+  std::vector<affinity_pair_t> get_affinity_pairs();
+
  private:
-  friend class Layout;
 
   // The hash table being traced.
-  std::unordered_set<entry_t> analysis_set;
 
   // Verbosity setting
   static std::ostream &err;
@@ -279,6 +277,8 @@ class Analysis {
   static constexpr uint32_t analysis_stage_time = 1 << 12;
 
   entry_vec_t<entry_t> analysis_vec;
+  entry_set_t<entry_t> analysis_set;
+
   entry_set_t<entry_t> remove_set;
 
   // Affinity data structure
@@ -299,8 +299,6 @@ class Analysis {
   }
 
   // Affinity analyzing functions
-  std::vector<affinity_pair_t> get_affinity_pairs();
-
   void update_affinity(const entry_vec_t<entry_t>& entry_vec, const entry_t& entry, int fpdist_ind);
 
   void add_compress_update(const entry_t& entry, bool analysis);
