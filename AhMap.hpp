@@ -6,6 +6,7 @@
 #include <cstddef>
 
 #include <cstdlib>
+#include <vector>
 #include <cmath>
 #include <tuple>
 
@@ -30,12 +31,13 @@ class AhMap {
   using ah_map   = AhMap<K, V, cache_hash, trace_accesses, Hash, Pred>;
 
   static constexpr unsigned AH_EXPAND_FACTOR = 11;
-  static constexpr unsigned AH_REORDER_CHECK = 1000000;
+  static constexpr unsigned AH_REORDER_CHECK = 10000000;
   static constexpr unsigned AH_INITIAL_SIZE = 3;
   static constexpr float    AH_LOAD_FACTOR = 0.15;
 
   AhMap(const AhMap&);
   AhMap& operator=(const AhMap&);
+
  public:
   AhMap() : epoc(0), num_bins(AH_INITIAL_SIZE), num_entries(0),
     total_capacity((size_t)ceil((1.0 + AH_LOAD_FACTOR) * AH_INITIAL_SIZE)),
@@ -126,7 +128,7 @@ class AhMap {
     // e.g. more elements faster reorder
     //      less elements slower reorder
 
-    std::unordered_map<K,V> collision_map{};
+    std::unordered_map<K, V> collision_map{};
 
     std::cout << "LINEAR ORDERING:\n";
     auto a = trace.results();
@@ -208,7 +210,7 @@ class AhMap {
     delete[] old_entries;
 
     // Grab reordering information.
-    //auto reorder = trace.results();
+    // auto reorder = trace.results();
 
     // Reinsert all entries into new bin list.
     for (size_t i = 0; i < old_bin_num; i++) {

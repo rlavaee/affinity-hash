@@ -8,11 +8,10 @@
 
 #include "AffinityAnalysis.hpp"
 
-//affinity representation of a hash table entry
 template<typename T, typename D>
 class Tracer {
  public:
-  Tracer(T* t) : root(t), analyzer(t), layout(analyzer) {}
+  Tracer(T* t) : root(t), analyzer(), layout(analyzer) {}
   ~Tracer() {}
 
   void record(D* data) {
@@ -29,9 +28,9 @@ class Tracer {
     unsigned i = 0;
 
     std::for_each(i_layout.begin(), i_layout.end(),
-    [&](typename Layout<T, D>::layout_t& ls) {
+    [&](layout_t& ls) {
       std::for_each(ls.begin(), ls.end(),
-      [&] (entry_t<T>& e) {
+      [&] (entry_t& e) {
         f_layout[i].push_back(e.entry_index);
       });
       ++i;
@@ -41,6 +40,9 @@ class Tracer {
   }
 
   std::vector<entry_index_t> results() {
+    //if(!(k analysis stages have passed))
+    //  return std::vector<entry_index_t>();
+
     auto i_layout = layout.find_affinity_layout();
     auto f_layout = std::vector<entry_index_t>();
 
@@ -49,9 +51,9 @@ class Tracer {
 
     // Flatten randomly ordered layouts.
     std::for_each(i_layout.begin(), i_layout.end(),
-    [&](typename Layout<T, D>::layout_t& ls) {
+    [&](layout_t& ls) {
       std::for_each(ls.begin(), ls.end(),
-      [&] (entry_t<T>& e) {
+      [&] (entry_t& e) {
         f_layout.push_back(e.entry_index);
       });
     });
@@ -61,8 +63,8 @@ class Tracer {
 
  private:
   T const* const root;
-  Analysis<T, D> analyzer;
-  Layout<T, D> layout;
+  Analysis analyzer;
+  Layout layout;
 };
 
 #endif
