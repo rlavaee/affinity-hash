@@ -75,14 +75,14 @@ struct entry_t {
 };
 
 namespace std {
- template<> struct hash<entry_t> {
+template<> struct hash<entry_t> {
   size_t operator()(const entry_t& __val) const noexcept {
     size_t const h2 ( std::hash<entry_index_t>()(__val.entry_index) );
     return h2;
   }
 };
 
- template<> struct hash<const entry_t> {
+template<> struct hash<const entry_t> {
   size_t operator()(const entry_t& __val) const noexcept {
     size_t const h2 ( std::hash<entry_index_t>()(__val.entry_index) );
     return h2;
@@ -135,7 +135,7 @@ struct wcount_t {
 
   uint32_t get_affinity() {
     uint32_t a = 0;
-    for(uint32_t i = 0; i < common_windows.size(); ++i)
+    for (uint32_t i = 0; i < common_windows.size(); ++i)
       a += ((common_windows.size() - i) * common_windows[i]);
 
     return a;
@@ -206,9 +206,17 @@ struct window_t {
     owners.clear();
   }
 
-  void push_front(const T& entry) { wsize++; }
-  void erase(const typename entry_list_t<T>::iterator& it) { wsize--; }
-  bool empty() { return wsize == 0; }
+  void push_front(const T& entry) {
+    wsize++;
+  }
+
+  void erase(const typename entry_list_t<T>::iterator& it) {
+    wsize--;
+  }
+
+  bool empty() {
+    return wsize == 0;
+  }
 
   void merge_owners(const window_t& other) {
     typename entry_vec_t<T>::iterator eit_begin = owners.begin();
@@ -249,7 +257,7 @@ struct layout_t: std::deque<entry_t> {
     this->push_back(fentry);
   }
 
-  void merge(std::unordered_map<entry_t, layout_t*> &layout_map, layout_t* layout) {
+  void merge(std::unordered_map<entry_t, layout_t*>& layout_map, layout_t* layout) {
     for (const auto& entry : *layout) {
       this->push_back(entry);
       layout_map[entry] = this;
@@ -281,16 +289,19 @@ class Analysis {
   std::vector<layout_t> getLayouts();
 
  private:
-
-  // The hash table being traced.
-
   // Verbosity setting
-  static std::ostream &err;
+  static std::ostream& err;
   bool DEBUG = false;
   bool PRINT = false;
 
   // Sampling settings
   timestamp_t timestamp;  // TODO: is [0, 2^32] going to be an issue?
+
+  enum stage_t { SAMPLE_STAGE, TRACE_STAGE };
+  stage_t current_stage;
+
+  typedef void (Analysis::*fptr)(entry_index_t);
+  fptr current_stage_fn;
 
   uint32_t analysis_count_down;
   uint32_t reorder_count_down;
@@ -309,16 +320,9 @@ class Analysis {
 
   // Trace list data structure
   window_list_t<entry_t> window_list;
-
   timestamp_map_t<entry_t> timestamp_map;
 
   std::unordered_map<entry_t, layout_t*> layout_map;
-
-  enum stage_t { SAMPLE_STAGE, TRACE_STAGE };
-  stage_t current_stage;
-
-  typedef void (Analysis::*fptr)(entry_index_t);
-  fptr current_stage_fn;
 
   // Debug functions
   void dump_window_list (std::ostream& out, window_list_t<entry_t>& wlist) {

@@ -129,30 +129,30 @@ class AhMap {
     //      less elements slower reorder
 
     std::unordered_map<K, V> collision_map{};
-/*
-    std::cout << "LINEAR ORDERING:\n";
-    auto a = trace.results();
+    /*
+        std::cout << "LINEAR ORDERING:\n";
+        auto a = trace.results();
 
-    std::for_each(a.begin(), a.end(), [&] (entry_index_t& e) {
-      if(collision_map.find(std::get<0>(this->entries[e].value)) == collision_map.end())
-        collision_map[std::get<0>(this->entries[e].value)] = std::get<1>(this->entries[e].value);
-      else
-        std::cout << "\n\nDUPLICATE KEY!\n\n";
-      std::cout << "(" << std::get<0>(this->entries[e].value) << ", " << std::get<1>(this->entries[e].value) << ")";
-    });
+        std::for_each(a.begin(), a.end(), [&] (entry_index_t& e) {
+          if(collision_map.find(std::get<0>(this->entries[e].value)) == collision_map.end())
+            collision_map[std::get<0>(this->entries[e].value)] = std::get<1>(this->entries[e].value);
+          else
+            std::cout << "\n\nDUPLICATE KEY!\n\n";
+          std::cout << "(" << std::get<0>(this->entries[e].value) << ", " << std::get<1>(this->entries[e].value) << ")";
+        });
 
-*/
+    */
     std::cout << "\nNON-LINEAR ORDERING:\n";
     auto b = trace.non_linear_results();
     unsigned i = 0;
 
     std::for_each(b.begin(), b.end(), [&] (std::vector<entry_index_t>& v) {
       std::cout << "Group " << i << ":\n";
-      std::for_each(v.begin(), v.end(), [&](entry_index_t &e) {
+      std::for_each(v.begin(), v.end(), [&](entry_index_t& e) {
         std::cout << "(" << std::get<0>(this->entries[e].value) << ", " << std::get<1>(this->entries[e].value) << ")";
         // std::cout << "\"" << std::get<0>(this->entries[e].value)  << "\"" << ", ";
       });
-      std::cout <<"\n";
+      std::cout << "\n";
       ++i;
     });
 

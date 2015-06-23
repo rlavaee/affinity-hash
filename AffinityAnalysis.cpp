@@ -7,7 +7,7 @@
   <getLayouts>, and <trace_hash_access>
 */
 
-std::ostream &Analysis::err(std::cerr);
+std::ostream& Analysis::err(std::cerr);
 
 Analysis::Analysis() {
   srand(time(NULL));
@@ -93,7 +93,7 @@ void Analysis::trace_hash_access(entry_index_t entry_index) {
   timestamp++;
 
   // Switch to new stage if the current has ended.
-  if(!analysis_count_down--)
+  if (!analysis_count_down--)
     transition_stage();
 
   // Process entry according to current stage.
@@ -116,7 +116,7 @@ void Analysis::trace_hash_access(entry_index_t entry_index) {
     the current stage.
 */
 void Analysis::transition_stage() {
-  switch(current_stage) {
+  switch (current_stage) {
     case SAMPLE_STAGE: { // -> TRACE_STAGE
       if (DEBUG) {
         err << "End of the sampling stage, analyzed entries are:\n";
@@ -148,7 +148,7 @@ void Analysis::transition_stage() {
       timestamp_map.clear();
 
       // Enter a reorder stage every 256 trace stages
-      if(trace_stage_count++ % 256 == 0)
+      if (trace_stage_count++ % 256 == 0)
         reorder_stage();
 
       // TODO: Change analysis_set to new ids. and manage reordering stages.
@@ -251,8 +251,8 @@ std::vector<affinity_pair_t<entry_t>> Analysis::get_affinity_pairs() {
 
   // Decay any affinities whose elements haven't been
   // called between the current and last reorder stage.
-  for(auto& v : decay_map) {
-    std::pair<bool, uint32_t> &e = v.second;
+  for (auto& v : decay_map) {
+    std::pair<bool, uint32_t>& e = v.second;
     if (!e.first) e.second += 1;
     e.first = false;
 
@@ -260,12 +260,12 @@ std::vector<affinity_pair_t<entry_t>> Analysis::get_affinity_pairs() {
   }
 
   // Remove unused elements from decay_map.
-  for(auto it = decay_map.begin(); it != decay_map.end();) {
-    if(touched.find(it->first) == touched.end())
+  for (auto it = decay_map.begin(); it != decay_map.end();) {
+    if (touched.find(it->first) == touched.end())
       it = decay_map.erase(it);
     else
       ++it;
-    }
+  }
 
   for (auto& all_wcount_pair : affinity_map) {
     auto le = all_wcount_pair.first;

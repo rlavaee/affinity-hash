@@ -26,8 +26,8 @@ class Tracer {
     auto f_layout = std::vector<std::vector<entry_index_t>>(i_layout.size());
     unsigned i = 0;
 
-    for(auto &ls : i_layout) {
-      for(auto &e : ls)
+    for (auto& ls : i_layout) {
+      for (auto& e : ls)
         f_layout[i].push_back(e.entry_index);
       ++i;
     }
@@ -43,8 +43,8 @@ class Tracer {
     std::random_shuffle(i_layout.begin(), i_layout.end());
 
     // Flatten randomly ordered layouts.
-    for(auto &ls : i_layout)
-      for(auto &e : ls)
+    for (auto& ls : i_layout)
+      for (auto& e : ls)
         f_layout.push_back(e.entry_index);
 
     return f_layout;
