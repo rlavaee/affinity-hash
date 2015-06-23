@@ -1,11 +1,223 @@
 #include "AffinityAnalysis.hpp"
 
-Layout::Layout(Analysis& a) : analysis(a) {}
+/*
+  Class: Affinity
 
-std::vector<layout_t> Layout::find_affinity_layout() {
+  Public member functions: <Analysis>, <remove_entry>,
+  <getLayouts>, and <trace_hash_access>
+*/
+
+std::ostream &Analysis::err(std::cerr);
+
+Analysis::Analysis() {
+  srand(time(NULL));
+
+  // get prepared for the first analysis_set_sampling round
+  analysis_count_down = analysis_sampling_time;
+  current_stage_fn = &Analysis::sample_stage;
+  current_stage = SAMPLE_STAGE;
+
+  const char* e;
+  if ((e = getenv("ST_HASH_DEBUG")) && atoi(e) == 1)
+    DEBUG = true;
+
+  if ((e = getenv("ST_HASH_PRINT")) && atoi(e) == 1)
+    PRINT = true;
+
+  if ((e = getenv("ST_HASH_ANALYSIS_SAMPLE_SIZE")))
+    analysis_set_size = atoi(e);
+  else  // default value; just to make sure it will be working for more than 1
+    analysis_set_size = 2;
+
+  if ((e = getenv("ST_HASH_MAX_FPDIST_IND")))
+    max_fpdist_ind = atoi(e);
+  else // default value; just something non-trivial
+    max_fpdist_ind = 2;
+
+  max_fpdist = 1 << max_fpdist_ind;
+
+  timestamp = 0;
+  trace_stage_count = 0;
+}
+
+/*
+  Function: remove_entry
+
+  Removes a <entry_t> element from the analysis entirely.
+
+  Effects:
+    <entry_index> is added to <delete_set> to allow
+    for it's lazy deletion from <affinity_map>.
+
+    <entry_index> is removed from <window_list>, <analysis_vec>,
+    <analysis_set>, and <timestamp_map> if applicable. This doesn't
+    need to happen simply ignore <entry_index> while generating
+    pairings. Still remove form <analysis_set> though; maybe.
+*/
+void Analysis::remove_entry(entry_index_t entry_index) {
+  remove_set.emplace(entry_index);
+}
+
+/*
+  Function: modify_entry
+
+  Changes the uid of an entry_t in the analysis from o to n.
+
+  Effects:
+    Modifies <analysis_vec>, <analysis_set>, <timestamp_map>,
+    <decay_map>, and <window_list> changing <entry_mappings>[i].first
+    to <entry_mappings>[i].second for all i.
+
+void Analysis::modify_entries(std::vector<std::pair<entry_index_t, entry_index_t>> entry_mappings) {
+  for(const auto &p : entry_mappings) {
+
+  }
+}
+*/
+
+std::vector<layout_t> Analysis::getLayouts() {
+  std::vector<layout_t> layouts;
+
+  for (auto layout_pair : layout_map)
+    if (!layout_pair.second->dumped) {
+      layouts.push_back(*layout_pair.second);
+      // layout_os << *layout_pair.second;
+      layout_pair.second->dumped = true;
+    }
+
+  return layouts;
+}
+
+
+void Analysis::trace_hash_access(entry_index_t entry_index) {
+  timestamp++;
+
+  // Switch to new stage if the current has ended.
+  if(!analysis_count_down--)
+    transition_stage();
+
+  // Process entry according to current stage.
+  (this->*current_stage_fn)(entry_index);
+}
+
+/*
+  Class: Analysis
+
+  Private member functions: <trace_stage>, <sample_stage>,
+  <reorder_stage>, <transition_stage>, <update_affinity>,
+  and <add_compress_update>
+*/
+
+/*
+  Function: transition_stages
+
+  Effects:
+    Changes <current_stage> and <current_stage_fn> to
+    the current stage.
+*/
+void Analysis::transition_stage() {
+  switch(current_stage) {
+    case SAMPLE_STAGE: { // -> TRACE_STAGE
+      if (DEBUG) {
+        err << "End of the sampling stage, analyzed entries are:\n";
+
+        for (const auto& a_entry : analysis_vec)
+          err << a_entry << "\n";
+        err << "\n";
+      }
+
+      // For constant time lookup.
+      for (const auto& e : analysis_vec)
+        analysis_set.insert(e);
+
+      analysis_count_down = analysis_stage_time;
+      current_stage_fn = &Analysis::trace_stage;
+      current_stage = TRACE_STAGE;
+    } break;
+
+    case TRACE_STAGE: { // -> SAMPLE_STAGE
+      if (DEBUG) {
+        err << "Analysis stage finishes now!\n";
+        err.flush();
+      }
+
+      // Clear the exluded entry set and the analysis entry set
+      analysis_vec.clear();
+      analysis_set.clear();
+      window_list.clear();
+      timestamp_map.clear();
+
+      // Enter a reorder stage every 256 trace stages
+      if(trace_stage_count++ % 256 == 0)
+        reorder_stage();
+
+      // TODO: Change analysis_set to new ids. and manage reordering stages.
+      analysis_count_down = analysis_sampling_time;
+      current_stage_fn = &Analysis::sample_stage;
+      current_stage = SAMPLE_STAGE;
+    } break;
+  }
+}
+
+/*
+  Function: sample_stage
+
+  Effects:
+*/
+void Analysis::sample_stage(entry_index_t entry_index) {
+  entry_t entry(entry_index);
+
+  // Fill in the analysis vector first
+  if (analysis_vec.size() < analysis_set_size) {
+    analysis_vec.push_back(entry);
+
+  // Reservoir sampling
+  } else {
+    // TODO: Ask about increasing probablity as
+    // analysis_sampling_time - analysis_count_down <= analysis_set_size
+    int r = rand() % (analysis_sampling_time - analysis_count_down);
+    if (r < analysis_set_size)
+      analysis_vec[r] = entry;
+  }
+}
+
+/*
+  Function: trace_stage
+
+  Effects:
+*/
+void Analysis::trace_stage(entry_index_t entry_index) {
+  entry_t entry(entry_index);
+
+  if (DEBUG) dump_window_list(err, window_list);
+
+  add_compress_update(entry, (analysis_set.find(entry) != analysis_set.end()));
+}
+
+/*
+  Function: reorder_stage
+
+  A reorder stage generates and caches a layout based on
+  affinities generated during the trace stage. During this
+  stage pair-wise affinities of objects are also decreased
+  if an object in the pair hasn't been accessed since the
+  last reorder stage via <decay_map>. Beyond this
+
+  Effects:
+    Removes <delete_set> elements from <affinity_map> then
+    clears <delete_set>.
+
+    Removes <entry_t> elements from <afffinity_map> based on
+    their decay due to <decay_map>.
+
+    Removes unused entires from <decay_map>.
+
+    Generates <layout_map>.
+*/
+void Analysis::reorder_stage() {
   layout_map.clear();
 
-  std::vector<affinity_pair_t> all_affinity_pairs = analysis.get_affinity_pairs();
+  std::vector<affinity_pair_t> all_affinity_pairs = get_affinity_pairs();
 
   std::sort(all_affinity_pairs.rbegin(), all_affinity_pairs.rend());
 
@@ -31,158 +243,45 @@ std::vector<layout_t> Layout::find_affinity_layout() {
         lLayoutPair.first->second->merge(layout_map, rLayoutPair.first->second);
     }
   }
-
-  return getLayouts();
 }
-
-std::vector<layout_t> Layout::getLayouts() {
-  std::vector<layout_t> layouts;
-
-  for (auto layout_pair : layout_map)
-    if (!layout_pair.second->dumped) {
-      layouts.push_back(*layout_pair.second);
-      // layout_os << *layout_pair.second;
-      layout_pair.second->dumped = true;
-    }
-
-  return layouts;
-}
-
-
-/** AFFINITY public **/
-std::ostream &Analysis::err(std::cerr);
-
-Analysis::Analysis() {
-  srand(time(NULL));
-
-  // get prepared for the first analysis_set_sampling round
-  analysis_set_sampling = true;
-  analysis_count_down = analysis_sampling_time;
-
-  const char* e;
-  if ((e = getenv("ST_HASH_DEBUG")) && atoi(e) == 1)
-    DEBUG = true;
-
-  if ((e = getenv("ST_HASH_PRINT")) && atoi(e) == 1)
-    PRINT = true;
-
-  if ((e = getenv("ST_HASH_ANALYSIS_SAMPLE_SIZE")))
-    analysis_set_size = atoi(e);
-  else  // default value; just to make sure it will be working for more than 1
-    analysis_set_size = 2;
-
-  if ((e = getenv("ST_HASH_MAX_FPDIST_IND")))
-    max_fpdist_ind = atoi(e);
-  else // default value; just something non-trivial
-    max_fpdist_ind = 2;
-
-  max_fpdist = 1 << max_fpdist_ind;
-
-  timestamp = 0;
-}
-
-void Analysis::trace_hash_access(entry_index_t entry_index) {
-  timestamp++;
-
-  // Count down and transit into the next stage if count drops to zero.
-  if (!analysis_count_down--) {
-    if (analysis_set_sampling) {
-      if (DEBUG) {
-        err << "End of the sampling stage, analyzed entries are:\n";
-
-        for (const auto& a_entry : analysis_vec)
-          err << a_entry << "\n";
-        err << "\n";
-      }
-
-      analysis_set_sampling = false;
-      // For up to few hundred elements, lookup in vector is faster than in red-black tree:
-      //	http://cppwisdom.quora.com/std-map-and-std-set-considered-harmful
-      // analysis_set = entry_set_t(analysis_vec.begin(),analysis_vec.end());
-      for (const auto& e : analysis_vec)
-        analysis_set.insert(e);
-
-      analysis_count_down = analysis_stage_time;
-    } else {
-      if (DEBUG) {
-        err << "Analysis stage finishes now!\n";
-        err.flush();
-      }
-
-      // Clear the exluded entry set and the analysis entry set
-      analysis_vec.clear();
-      analysis_set.clear();
-      window_list.clear();
-      timestamp_map.clear();
-
-      // Get ready for the next analysis_set_sampling round
-      analysis_set_sampling = true;
-      analysis_count_down = analysis_sampling_time;
-
-      // TODO: Change analysis_set to new ids. and manage reordering stages.
-    }
-
-  } else {
-    entry_t entry(entry_index);
-
-    if (analysis_set_sampling) {
-      // Fill in the analysis vector first
-      if (analysis_vec.size() < analysis_set_size) {
-        analysis_vec.push_back(entry);
-      } else {
-        // Reservoir sampling
-        int r = rand() % (analysis_sampling_time - analysis_count_down);
-        if (r < analysis_set_size)
-          analysis_vec[r] = entry;
-      }
-    } else {
-      if (DEBUG) dump_window_list(err, window_list);
-
-      add_compress_update(entry, (analysis_set.find(entry) != analysis_set.end()));
-    }
-  }
-}
-
-void Analysis::remove_entry(entry_index_t entry_index) {
-  // NOTE: Nothing seems to be done about this set.
-  remove_set.insert(entry_t(entry_index));
-
-  // Remove from all analysis structures
-  // NOTE: the index from the interior affinity_map
-  // is removed lazily in the generate_all_affinity_pairs().
-  std::remove_if(analysis_vec.begin(), analysis_vec.end(),
-    [&](entry_t &e) { return e.entry_index == entry_index; });
-
-  // std::remove_if(window_list)
-}
-
-
-/** AFFINITY private **/
 
 std::vector<affinity_pair_t<entry_t>> Analysis::get_affinity_pairs() {
   std::vector<affinity_pair_t> all_affinity_pairs;
+  std::unordered_set<entry_t> touched;
 
-  // Decay any affinities whose elements haven't been called
-  // during the last generation phase.
-  for_each(decay_map.begin(), decay_map.end(),
-    [](decay_map_t<entry_t>::value_type &v) {
-      std::pair<bool, uint32_t> &e = v.second;
-      if (!e.first) e.second += 1;
+  // Decay any affinities whose elements haven't been
+  // called between the current and last reorder stage.
+  for(auto& v : decay_map) {
+    std::pair<bool, uint32_t> &e = v.second;
+    if (!e.first) e.second += 1;
+    e.first = false;
 
-      // All affinities should decay if they aren't accessed
-      // before get_affinity_pairs() is called again.
-      e.first = false;
-  });
+    touched.insert(v.first);
+  }
+
+  // Remove unused elements from decay_map.
+  for(auto it = decay_map.begin(); it != decay_map.end();) {
+    if(touched.find(it->first) == touched.end())
+      it = decay_map.erase(it);
+    else
+      ++it;
+    }
 
   for (auto& all_wcount_pair : affinity_map) {
     auto le = all_wcount_pair.first;
+
+    if (remove_set.find(le) != remove_set.end()) {
+      affinity_map.erase(le);
+      continue;
+    }
+
     auto& all_wcount = all_wcount_pair.second;
     for (auto& wcount_pair : all_wcount.wcount_map) {
       auto re = wcount_pair.first;
       uint32_t affinity = wcount_pair.second.get_affinity() >> decay_map[re].second;
 
-      // Remove an affinity pair if it has decayed entirely.
-      if (affinity == 0) {
+      // Remove an affinity pair if it has decayed entirely or it's been removed.
+      if (affinity == 0 || remove_set.find(re) != remove_set.end()) {
         all_wcount.wcount_map.erase(re);
 
       // Otherwise add it to all pairs.
@@ -192,10 +291,13 @@ std::vector<affinity_pair_t<entry_t>> Analysis::get_affinity_pairs() {
     }
   }
 
+  // All entry_t's have been removed.
+  remove_set.clear();
+
   return all_affinity_pairs;
 }
 
-void Analysis::update_affinity(const entry_vec_t<entry_t>& entry_vec /* owners */, const entry_t& entry, int fpdist_ind) {
+void Analysis::update_affinity(const entry_vec_t<entry_t>& entry_vec, const entry_t& entry, int fpdist_ind) {
   decay_map[entry] = std::make_pair(true, 0);
 
   for (const auto& a_entry : entry_vec) {

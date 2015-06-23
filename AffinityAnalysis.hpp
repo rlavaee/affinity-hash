@@ -52,8 +52,6 @@ struct affinity_pair_t {
   }
 };
 
-
-
 /*
   Struct: entry_t
 
@@ -244,66 +242,6 @@ std::ostream& operator << (std::ostream& out, const window_list_t<T>& wlist) {
   return out;
 }
 
-class Analysis {
-  using affinity_pair_t = affinity_pair_t<entry_t>;
-
- public:
-  Analysis();
-
-  // TODO: analysis_bit not needed. analysis_vec provides equiv. information.
-  void trace_hash_access(entry_index_t entry_index);
-
-  void remove_entry(entry_index_t entry_index);
-
-  std::vector<affinity_pair_t> get_affinity_pairs();
-
- private:
-
-  // The hash table being traced.
-
-  // Verbosity setting
-  static std::ostream &err;
-  bool DEBUG = false;
-  bool PRINT = false;
-
-  // Sampling settings
-  timestamp_t timestamp;  // TODO: is [0, 2^32] going to be an issue?
-  bool analysis_set_sampling;
-
-  uint32_t analysis_count_down;
-  uint32_t reorder_count_down;
-
-  static constexpr uint32_t analysis_sampling_time = 1 << 8;
-  static constexpr uint32_t analysis_stage_time = 1 << 12;
-
-  entry_vec_t<entry_t> analysis_vec;
-  entry_set_t<entry_t> analysis_set;
-
-  entry_set_t<entry_t> remove_set;
-
-  // Affinity data structure
-  all_wcount_map_t<entry_t> affinity_map;
-  decay_map_t<entry_t> decay_map;
-
-  // Trace list data structure
-  window_list_t<entry_t> window_list;
-
-  timestamp_map_t<entry_t> timestamp_map;
-
-  // Debug functions
-  void dump_window_list (std::ostream& out, window_list_t<entry_t>& wlist) {
-    out << "trace list:------------------------------------------\n" ;
-    //out << "size: " << window_list_size << "\n";
-    out << wlist ;
-    out << "---------------------------------------------\n";
-  }
-
-  // Affinity analyzing functions
-  void update_affinity(const entry_vec_t<entry_t>& entry_vec, const entry_t& entry, int fpdist_ind);
-
-  void add_compress_update(const entry_t& entry, bool analysis);
-};
-
 struct layout_t: std::deque<entry_t> {
   bool dumped = false;
 
@@ -329,18 +267,75 @@ struct layout_t: std::deque<entry_t> {
   }
 };
 
-class Layout {
+class Analysis {
   using affinity_pair_t = affinity_pair_t<entry_t>;
 
-public:
-  Layout(Analysis& a);
+ public:
+  Analysis();
 
-  std::vector<layout_t> find_affinity_layout();
+  // TODO: analysis_bit not needed. analysis_vec provides equiv. information.
+  void trace_hash_access(entry_index_t entry_index);
+
+  void remove_entry(entry_index_t entry_index);
 
   std::vector<layout_t> getLayouts();
 
-private:
-  Analysis& analysis;
+ private:
+
+  // The hash table being traced.
+
+  // Verbosity setting
+  static std::ostream &err;
+  bool DEBUG = false;
+  bool PRINT = false;
+
+  // Sampling settings
+  timestamp_t timestamp;  // TODO: is [0, 2^32] going to be an issue?
+
+  uint32_t analysis_count_down;
+  uint32_t reorder_count_down;
+  uint32_t trace_stage_count;
+
+  static constexpr uint32_t analysis_sampling_time = 1 << 8;
+  static constexpr uint32_t analysis_stage_time = 1 << 12;
+
+  entry_vec_t<entry_t> analysis_vec;
+  entry_set_t<entry_t> analysis_set;
+  entry_set_t<entry_t> remove_set;
+
+  // Affinity data structure
+  all_wcount_map_t<entry_t> affinity_map;
+  decay_map_t<entry_t> decay_map;
+
+  // Trace list data structure
+  window_list_t<entry_t> window_list;
+
+  timestamp_map_t<entry_t> timestamp_map;
+
   std::unordered_map<entry_t, layout_t*> layout_map;
+
+  enum stage_t { SAMPLE_STAGE, TRACE_STAGE };
+  stage_t current_stage;
+
+  typedef void (Analysis::*fptr)(entry_index_t);
+  fptr current_stage_fn;
+
+  // Debug functions
+  void dump_window_list (std::ostream& out, window_list_t<entry_t>& wlist) {
+    out << "trace list:------------------------------------------\n" ;
+    //out << "size: " << window_list_size << "\n";
+    out << wlist ;
+    out << "---------------------------------------------\n";
+  }
+
+  std::vector<affinity_pair_t> get_affinity_pairs();
+
+  void reorder_stage();
+  void trace_stage(entry_index_t entry_index);
+  void sample_stage(entry_index_t entry_index);
+  void transition_stage();
+
+  void update_affinity(const entry_vec_t<entry_t>& entry_vec, const entry_t& entry, int fpdist_ind);
+  void add_compress_update(const entry_t& entry, bool analysis);
 };
 #endif
