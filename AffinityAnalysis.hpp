@@ -1,45 +1,50 @@
 #ifndef AFFINITY_ANAYLSIS_HPP
 #define AFFINITY_ANAYLSIS_HPP
 
-#include <list>
 #include <unordered_set>
 #include <functional>
 #include <cstdint>
 #include <algorithm>
-#include <fstream>
-#include <iomanip>
 #include <unordered_map>
 #include <vector>
-#include <numeric>
+//#include <numeric>
 #include <deque>
+#include <cmath>
+#include <array>
+#include <map>
 
 #include <iostream>
 
-/** Types **/
-using entry_index_t = ptrdiff_t;
-using wsize_t       = uint16_t;
-using timestamp_t   = uint32_t;
-
-template <class T> using timestamp_map_t = std::unordered_map<const T, timestamp_t>;
-template <class T> using entry_set_t = std::unordered_set<const T>;
-template <class T> using entry_vec_t = std::vector<T>;
-template <class T> using entry_list_t = std::list<T>;
-template <class T> using decay_map_t = std::unordered_map<T, std::pair<bool, uint32_t>>;
-
 /** Globals **/
-static wsize_t max_fpdist;
-static wsize_t max_fpdist_ind;
-static uint16_t analysis_set_size;
+static const uint16_t max_fpdist(1 << 10);
+static const uint16_t max_fpdist_ind(10);
+static const uint16_t analysis_set_size(10);
+
+static const uint16_t analysis_reordering_period(1 << (6+4));
+static const uint16_t analysis_staging_period(1 << 12);
+static const uint16_t analysis_sampling_period(1 << 8);
+
+/** Types **/
+using entry_t  = ptrdiff_t;
+using wsize_t  = uint16_t;   // bits(wsize_t)  >= log(max_fpdist)
+using avalue_t = uint32_t;   // bits(avalue_t) >= log(reorder_period * sampling_period) - 2
+
+using entry_index_t = ptrdiff_t;
+using entry_pair_t  = std::pair<entry_t, entry_t>;
+using window_hist_t = std::array<avalue_t, max_fpdist_ind>; // CHeck!
+
+template <class T> using entry_set_t = std::unordered_set<T>;
+template <class T> using entry_vec_t = std::vector<T>;
+template <class T> using decay_map_t = std::unordered_map<T, std::pair<bool, uint32_t>>;
 
 /*
   Struct: affinity_pair_t
 */
-template<class T>
 struct affinity_pair_t {
-  T lentry, rentry;
-  uint32_t affinity;
+  entry_t lentry, rentry;
+  avalue_t affinity;
 
-  affinity_pair_t(T le, T re, uint32_t affinity): lentry(le),
+  affinity_pair_t(entry_t le, entry_t re, uint32_t affinity): lentry(le),
     rentry(re), affinity(affinity) {}
 
   bool operator < (const affinity_pair_t affinity_pair) const {
@@ -47,209 +52,23 @@ struct affinity_pair_t {
   }
 
   friend std::ostream& operator << (std::ostream& out, const affinity_pair_t affinity_pair) {
-    out << "[" << affinity_pair.lentry << "," << affinity_pair.rentry << "]:" << affinity_pair.affinity;
+    out << "("<<"[" << affinity_pair.lentry << "," << affinity_pair.rentry << "]: " << affinity_pair.affinity << ")";
     return out;
   }
 };
 
 /*
-  Struct: entry_t
+  Struct: window_t
 
-  Stores information associated with a hashtable entry.
 */
-struct entry_t {
-  entry_index_t entry_index;
-
-  entry_t() {}
-  entry_t(entry_index_t b): entry_index(b) {}
-  entry_t(const entry_t& hentry): entry_index(hentry.entry_index) {}
-
-  bool operator == (const entry_t& rhs) const {
-    return entry_index == rhs.entry_index;
-  }
-
-  friend std::ostream& operator << (std::ostream& out, const entry_t& obj) {
-    out << "(" << std::setbase(16)  << obj.entry_index << ")" << std::setbase(10);
-    return out;
-  }
-};
-
-namespace std {
-template<> struct hash<entry_t> {
-  size_t operator()(const entry_t& __val) const noexcept {
-    size_t const h2 ( std::hash<entry_index_t>()(__val.entry_index) );
-    return h2;
-  }
-};
-
-template<> struct hash<const entry_t> {
-  size_t operator()(const entry_t& __val) const noexcept {
-    size_t const h2 ( std::hash<entry_index_t>()(__val.entry_index) );
-    return h2;
-  }
-};
-}
-
-/*
-  Struct: wcount_t
-
-  Stores the histogram of windows in which a pair of
-  entry_t's appear in for a given trace.
-*/
-struct wcount_t {
-  uint32_t excluded_windows;
-  std::vector<uint32_t> common_windows;
-  uint32_t all_windows;
-
-  wcount_t(): excluded_windows(0), all_windows(0) {
-    common_windows = std::vector<uint32_t>(max_fpdist_ind + 1);
-  }
-
-  wcount_t& operator+=(const wcount_t& rhs) {
-    this->excluded_windows += rhs.excluded_windows;
-
-    std::transform(rhs.common_windows.begin(), rhs.common_windows.end(),
-                   this->common_windows.begin(), this->common_windows.begin(), std::plus<uint32_t>());
-
-    this->all_windows += rhs.all_windows;
-
-    return *this;
-  }
-
-  friend std::ostream& operator << (std::ostream& out, const wcount_t& obj) {
-    out << "excluded: " << obj.excluded_windows;
-    out << "\nsum of common: " << obj.all_windows;
-    out << "\ncommon:\n";
-    out << "size: " << obj.common_windows.size() << "\n";
-
-    uint32_t check_sum = 0;
-    for (const auto& count : obj.common_windows) {
-      out << count << "\t";
-      check_sum += count;
-    }
-
-    out << "\n----------------------------\n";
-
-    return out;
-  }
-
-  uint32_t get_affinity() {
-    uint32_t a = 0;
-    for (uint32_t i = 0; i < common_windows.size(); ++i)
-      a += ((common_windows.size() - i) * common_windows[i]);
-
-    return a;
-  }
-};
-
-template <class T> using wcount_map_t = std::unordered_map<const T, wcount_t>;
-
-/*
-  Struct: all_wcount_t
-
-  Stores the histogram of windows in which a pair of
-  entry_t's appear in for a given trace.
-*/
-template <class T>
-struct all_wcount_t {
-  uint32_t potential_windows;
-  wcount_map_t<T> wcount_map;
-
-  all_wcount_t(uint32_t _pw): potential_windows(_pw) {}
-  all_wcount_t(): potential_windows(0) {
-    wcount_map = wcount_map_t<T>();
-  }
-
-  friend std::ostream& operator << (std::ostream& out, const all_wcount_t& obj) {
-    out << "potential windows: " << obj.potential_windows;
-    out << "\nwindow count map:\n";
-
-    for (const auto& wcount_pair : obj.wcount_map) {
-      out << wcount_pair.first << "\n";
-      out << wcount_pair.second << "\n";
-    }
-
-    return out;
-  }
-};
-
-template <class T> using all_wcount_map_t = std::unordered_map <const T, all_wcount_t<T>>;
-
-template <class T>
-std::ostream& operator << (std::ostream& out, const all_wcount_map_t<T>& m) {
-  for (const auto& all_wcount_pair : m) {
-    out << "************************\n";
-    out << all_wcount_pair.first << "\n";
-    out << all_wcount_pair.second << "\n";
-  }
-
-  return out;
-}
-
-template <class T>
 struct window_t {
-  entry_vec_t<T> owners;
-  wsize_t wsize;
-  wsize_t capacity; // NOT USED.
-  timestamp_t start;
-
-  window_t(): wsize(0) {
-    owners.reserve(analysis_set_size);
-  }
-
-  window_t(const T& entry, timestamp_t timestamp): wsize(1), capacity(1), start(timestamp) {
-    owners.reserve(analysis_set_size);
-    owners.push_back(entry);
-  }
-
-  ~window_t() {
-    owners.clear();
-  }
-
-  void push_front(const T& entry) {
-    wsize++;
-  }
-
-  void erase(const typename entry_list_t<T>::iterator& it) {
-    wsize--;
-  }
-
-  bool empty() {
-    return wsize == 0;
-  }
-
-  void merge_owners(const window_t& other) {
-    typename entry_vec_t<T>::iterator eit_begin = owners.begin();
-    typename entry_vec_t<T>::iterator eit_end = owners.end();
-
-    for (const auto& e : other.owners) {
-      if (std::find(eit_begin, eit_end, e) == eit_end)
-        owners.push_back(e);
-    }
-  }
-
-  friend std::ostream& operator << (std::ostream& out, const window_t& obj) {
-    out << "\nowners: ";
-    for (const auto& entry : obj.owners)
-      out << entry << " ";
-
-    out << "\n:size: " << obj.wsize << "\n";
-    return out;
-  }
-
+  wsize_t length;
 };
 
-template <class T> using window_list_t = std::list<window_t<T>>;
+/*
+  Struct: layout_t
 
-template <class T>
-std::ostream& operator << (std::ostream& out, const window_list_t<T>& wlist) {
-  for (const auto& window : wlist) {
-    out << window << "\n";
-  }
-
-  return out;
-}
-
+*/
 struct layout_t: std::deque<entry_t> {
   bool dumped = false;
 
@@ -275,13 +94,30 @@ struct layout_t: std::deque<entry_t> {
   }
 };
 
-class Analysis {
-  using affinity_pair_t = affinity_pair_t<entry_t>;
+/*
+  Ensures that <entry_pair_t> acts like an unordered pair
+  in associative containers.
+*/
+namespace std {
+template <> struct hash<entry_pair_t> {
+  inline size_t operator()(const entry_pair_t& v) const {
+    std::hash<entry_t> hash_fn;
+    return hash_fn(v.first) ^ hash_fn(v.second);
+  }
+};
 
+template <> struct equal_to<entry_pair_t> {
+  bool operator()(const entry_pair_t& lhs, const entry_pair_t& rhs) const {
+    return ((lhs.first == rhs.first && lhs.second == rhs.second)
+            || (lhs.first == rhs.second && lhs.second == rhs.first)) ? true : false;
+  }
+};
+}
+
+class Analysis {
  public:
   Analysis();
 
-  // TODO: analysis_bit not needed. analysis_vec provides equiv. information.
   void trace_hash_access(entry_index_t entry_index);
 
   void remove_entry(entry_index_t entry_index);
@@ -289,14 +125,12 @@ class Analysis {
   std::vector<layout_t> getLayouts();
 
  private:
-  // Verbosity setting
+  // Verbosity information
   static std::ostream& err;
   bool DEBUG = false;
   bool PRINT = false;
 
-  // Sampling settings
-  timestamp_t timestamp;  // TODO: is [0, 2^32] going to be an issue?
-
+  // Staging information
   enum stage_t { SAMPLE_STAGE, TRACE_STAGE };
   stage_t current_stage;
 
@@ -304,33 +138,20 @@ class Analysis {
   fptr current_stage_fn;
 
   uint32_t analysis_count_down;
-  uint32_t reorder_count_down;
   uint32_t trace_stage_count;
 
-  static constexpr uint32_t analysis_sampling_time = 1 << 8;
-  static constexpr uint32_t analysis_stage_time = 1 << 12;
-
+  // Sampling information
   entry_vec_t<entry_t> analysis_vec;
   entry_set_t<entry_t> analysis_set;
   entry_set_t<entry_t> remove_set;
 
-  // Affinity data structure
-  all_wcount_map_t<entry_t> affinity_map;
-  decay_map_t<entry_t> decay_map;
+  // Affinity information
+  std::map<entry_t, window_t> window_list;
+  std::unordered_map<entry_t, window_hist_t> singlFreq;
+  std::unordered_map<entry_pair_t, window_hist_t> jointFreq;
 
-  // Trace list data structure
-  window_list_t<entry_t> window_list;
-  timestamp_map_t<entry_t> timestamp_map;
-
+  // Layout information
   std::unordered_map<entry_t, layout_t*> layout_map;
-
-  // Debug functions
-  void dump_window_list (std::ostream& out, window_list_t<entry_t>& wlist) {
-    out << "trace list:------------------------------------------\n" ;
-    //out << "size: " << window_list_size << "\n";
-    out << wlist ;
-    out << "---------------------------------------------\n";
-  }
 
   std::vector<affinity_pair_t> get_affinity_pairs();
 
@@ -339,7 +160,7 @@ class Analysis {
   void sample_stage(entry_index_t entry_index);
   void transition_stage();
 
-  void update_affinity(const entry_vec_t<entry_t>& entry_vec, const entry_t& entry, int fpdist_ind);
   void add_compress_update(const entry_t& entry, bool analysis);
 };
+
 #endif

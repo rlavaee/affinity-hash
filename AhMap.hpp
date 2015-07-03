@@ -35,9 +35,6 @@ class AhMap {
   static constexpr unsigned AH_INITIAL_SIZE = 3;
   static constexpr float    AH_LOAD_FACTOR = 0.15;
 
-  AhMap(const AhMap&);
-  AhMap& operator=(const AhMap&);
-
  public:
   AhMap() : epoc(0), num_bins(AH_INITIAL_SIZE), num_entries(0),
     total_capacity((size_t)ceil((1.0 + AH_LOAD_FACTOR) * AH_INITIAL_SIZE)),

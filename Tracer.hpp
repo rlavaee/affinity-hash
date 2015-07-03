@@ -28,7 +28,7 @@ class Tracer {
 
     for (auto& ls : i_layout) {
       for (auto& e : ls)
-        f_layout[i].push_back(e.entry_index);
+        f_layout[i].push_back(e);
       ++i;
     }
 
@@ -45,7 +45,7 @@ class Tracer {
     // Flatten randomly ordered layouts.
     for (auto& ls : i_layout)
       for (auto& e : ls)
-        f_layout.push_back(e.entry_index);
+        f_layout.push_back(e);
 
     return f_layout;
   }

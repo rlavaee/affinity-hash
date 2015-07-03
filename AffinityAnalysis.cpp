@@ -13,9 +13,10 @@ Analysis::Analysis() {
   srand(time(NULL));
 
   // get prepared for the first analysis_set_sampling round
-  analysis_count_down = analysis_sampling_time;
+  analysis_count_down = analysis_sampling_period;
   current_stage_fn = &Analysis::sample_stage;
   current_stage = SAMPLE_STAGE;
+  trace_stage_count = 0;
 
   const char* e;
   if ((e = getenv("ST_HASH_DEBUG")) && atoi(e) == 1)
@@ -23,21 +24,6 @@ Analysis::Analysis() {
 
   if ((e = getenv("ST_HASH_PRINT")) && atoi(e) == 1)
     PRINT = true;
-
-  if ((e = getenv("ST_HASH_ANALYSIS_SAMPLE_SIZE")))
-    analysis_set_size = atoi(e);
-  else  // default value; just to make sure it will be working for more than 1
-    analysis_set_size = 2;
-
-  if ((e = getenv("ST_HASH_MAX_FPDIST_IND")))
-    max_fpdist_ind = atoi(e);
-  else // default value; just something non-trivial
-    max_fpdist_ind = 2;
-
-  max_fpdist = 1 << max_fpdist_ind;
-
-  timestamp = 0;
-  trace_stage_count = 0;
 }
 
 /*
@@ -90,7 +76,6 @@ std::vector<layout_t> Analysis::getLayouts() {
 
 
 void Analysis::trace_hash_access(entry_index_t entry_index) {
-  timestamp++;
 
   // Switch to new stage if the current has ended.
   if (!analysis_count_down--)
@@ -130,7 +115,7 @@ void Analysis::transition_stage() {
       for (const auto& e : analysis_vec)
         analysis_set.insert(e);
 
-      analysis_count_down = analysis_stage_time;
+      analysis_count_down = analysis_staging_period;
       current_stage_fn = &Analysis::trace_stage;
       current_stage = TRACE_STAGE;
     } break;
@@ -145,14 +130,19 @@ void Analysis::transition_stage() {
       analysis_vec.clear();
       analysis_set.clear();
       window_list.clear();
-      timestamp_map.clear();
 
       // Enter a reorder stage every 256 trace stages
-      if (trace_stage_count++ % 256 == 0)
+      // log(2 ^ 5 * 2 ^ 11) == 16
+      if (trace_stage_count++ % analysis_reordering_period == 0) {
         reorder_stage();
 
+        // Clear frequency information.
+        singlFreq.clear();
+        jointFreq.clear();
+      }
+
       // TODO: Change analysis_set to new ids. and manage reordering stages.
-      analysis_count_down = analysis_sampling_time;
+      analysis_count_down = analysis_sampling_period;
       current_stage_fn = &Analysis::sample_stage;
       current_stage = SAMPLE_STAGE;
     } break;
@@ -173,9 +163,7 @@ void Analysis::sample_stage(entry_index_t entry_index) {
 
   // Reservoir sampling
   } else {
-    // TODO: Ask about increasing probablity as
-    // analysis_sampling_time - analysis_count_down <= analysis_set_size
-    int r = rand() % (analysis_sampling_time - analysis_count_down);
+    int r = rand() % (analysis_sampling_period - analysis_count_down);
     if (r < analysis_set_size)
       analysis_vec[r] = entry;
   }
@@ -188,8 +176,6 @@ void Analysis::sample_stage(entry_index_t entry_index) {
 */
 void Analysis::trace_stage(entry_index_t entry_index) {
   entry_t entry(entry_index);
-
-  if (DEBUG) dump_window_list(err, window_list);
 
   add_compress_update(entry, (analysis_set.find(entry) != analysis_set.end()));
 }
@@ -245,153 +231,75 @@ void Analysis::reorder_stage() {
   }
 }
 
-std::vector<affinity_pair_t<entry_t>> Analysis::get_affinity_pairs() {
+std::vector<affinity_pair_t> Analysis::get_affinity_pairs() {
   std::vector<affinity_pair_t> all_affinity_pairs;
-  std::unordered_set<entry_t> touched;
+  all_affinity_pairs.reserve(jointFreq.size());
 
-  // Decay any affinities whose elements haven't been
-  // called between the current and last reorder stage.
-  for (auto& v : decay_map) {
-    std::pair<bool, uint32_t>& e = v.second;
-    if (!e.first) e.second += 1;
-    e.first = false;
+  for (const auto& wcount_pair : jointFreq) {
+    const auto& entry_pair = wcount_pair.first;
+    const auto& window_hist = wcount_pair.second;
 
-    touched.insert(v.first);
-  }
+    // Lazily remove datum.
+    //if(remove_set.find(entry_pair.first) || remove_set.find(entry_pair.second)) {
+    //  continue;
+    //}
 
-  // Remove unused elements from decay_map.
-  for (auto it = decay_map.begin(); it != decay_map.end();) {
-    if (touched.find(it->first) == touched.end())
-      it = decay_map.erase(it);
-    else
-      ++it;
-  }
+    avalue_t affinity = 0;
 
-  for (auto& all_wcount_pair : affinity_map) {
-    auto le = all_wcount_pair.first;
-
-    if (remove_set.find(le) != remove_set.end()) {
-      affinity_map.erase(le);
-      continue;
-    }
-
-    auto& all_wcount = all_wcount_pair.second;
-    for (auto& wcount_pair : all_wcount.wcount_map) {
-      auto re = wcount_pair.first;
-      uint32_t affinity = wcount_pair.second.get_affinity() >> decay_map[re].second;
-
-      // Remove an affinity pair if it has decayed entirely or it's been removed.
-      if (affinity == 0 || remove_set.find(re) != remove_set.end()) {
-        all_wcount.wcount_map.erase(re);
-
-      // Otherwise add it to all pairs.
-      } else {
-        all_affinity_pairs.emplace_back(le, re, affinity);
+    for(wsize_t w_ind = 0; w_ind < max_fpdist_ind; w_ind += 1) {
+      if(window_hist[w_ind] != 0) {
+        if(std::max(singlFreq[entry_pair.first][w_ind], singlFreq[entry_pair.second][w_ind]) == 0)
+          std::cout << "OVERFLOW!\n";
+        affinity += ((max_fpdist_ind - w_ind) * window_hist[w_ind]) /
+          std::max(singlFreq[entry_pair.first][w_ind], singlFreq[entry_pair.second][w_ind]);
       }
     }
+
+    if(affinity > 0)
+      all_affinity_pairs.emplace_back(entry_pair.first, entry_pair.second, affinity);
   }
 
-  // All entry_t's have been removed.
-  remove_set.clear();
+  //remove_set.clear();
 
   return all_affinity_pairs;
 }
 
-void Analysis::update_affinity(const entry_vec_t<entry_t>& entry_vec, const entry_t& entry, int fpdist_ind) {
-  decay_map[entry] = std::make_pair(true, 0);
-
-  for (const auto& a_entry : entry_vec) {
-    wcount_t& ref = affinity_map[a_entry].wcount_map[entry];
-    ref.common_windows.at(fpdist_ind)++;
-    ref.all_windows++;
-  }
+inline wsize_t log2_ceil(const wsize_t in) {
+  return ((sizeof(unsigned int) * 8) - __builtin_clz(in)) - 2;
 }
 
 void Analysis::add_compress_update(const entry_t& entry, bool analysis) {
-  typename window_list_t<entry_t>::iterator window_it = window_list.begin();
-
-  if (analysis) {
-    // NOTE: this will call the constructor of window_t
-    window_list.emplace_front(entry, timestamp);  // remember to set the capacity as well
-    auto res = affinity_map.emplace(entry, 0);
-    res.first->second.potential_windows++;
+  // Add or update window information for analyzed entry.
+  if(analysis) {
+    auto &window = window_list[entry];
+    window.length = 1;
   }
 
-  if (window_it == window_list.end())
-    return;
+  // decay_map[entry] = std::make_pair(true, 0);
 
-  auto res = timestamp_map.emplace(entry, timestamp);
+  for(auto e = window_list.begin(); e != window_list.end();) {
+    auto &owner  = e->first;
+    auto &window = e->second;
 
-  int entry_ts = -1;  // TODO: Ask why this is an int not timestamp_t.
-  if (!res.second) {
-    entry_ts = res.first->second;
-    res.first->second = timestamp;
-  }
-
-  if (window_it->start <= entry_ts)
-    return;
-
-  wsize_t fpdist;
-  if (analysis) {
-    fpdist = 1;
-  } else {
-    window_it->wsize++;
-    fpdist = 0;
-  }
-
-  typename window_list_t<entry_t>::iterator prev_window_it;
-  wsize_t exp_fpdist = 1;
-  int exp_fpdist_ind = 0;
-
-  while (true) {
-    prev_window_it = window_it;
-    window_it++;
-
-    prev_window_it->capacity = fpdist + 1;
-
-compress:
-    if (window_it == window_list.end()) {
-      fpdist += prev_window_it->wsize;
-
-      if (fpdist > max_fpdist)
-        return;
-
-      while (fpdist > exp_fpdist) {
-        exp_fpdist <<= 1;
-        exp_fpdist_ind++;
-      }
-      update_affinity(prev_window_it->owners, entry, exp_fpdist_ind);
-      return;
+    // Don't add to window that starts with same entry.
+    if(owner == entry) {
+      ++e;
+      continue;
     }
 
-    if (window_it->start <= entry_ts) {
-      window_it->wsize--;
-    }
+    // Update window size.
+    window.length += 1;
+    wsize_t window_ind = log2_ceil(window.length);
 
-    if (fpdist + 1 >= prev_window_it->wsize + window_it->wsize) { /* fpdist+1 = prev_window_it->capacity */
-      prev_window_it->wsize += window_it->wsize;
+    // Update frequency information.
+    singlFreq[entry][window_ind] += 1;
+    jointFreq[entry_pair_t(entry, owner)][window_ind] += 1;
 
-      prev_window_it->merge_owners(*window_it);
-      prev_window_it->start = window_it->start;
-
-      /* may leak memory */
-      window_it = window_list.erase(window_it);
-      goto compress;
+    // If e's window exceeds the max remove element from window analysis.
+    if(window.length == max_fpdist + 1) {
+      e = window_list.erase(e);
     } else {
-      fpdist += prev_window_it->wsize;
-
-      if (fpdist > max_fpdist)
-        return;
-
-      while (fpdist > exp_fpdist) {
-        exp_fpdist <<= 1;
-        exp_fpdist_ind++;
-      }
-
-      update_affinity(prev_window_it->owners, entry, exp_fpdist_ind);
+      ++e;
     }
-
-    if (prev_window_it->start <= entry_ts)  // nothing to be done after this.
-      return;
   }
 }
