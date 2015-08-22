@@ -12,13 +12,13 @@
 #include <cmath>
 #include <array>
 #include <map>
-
+#include <set>
 #include <iostream>
 
 /** Globals **/
-static const uint16_t max_fpdist(1 << 10);
-static const uint16_t max_fpdist_ind(10);
-static const uint16_t analysis_set_size(10);
+static const uint16_t max_fpdist(1 << 8);
+static const uint16_t max_fpdist_ind(8);
+static const uint16_t analysis_set_size(3);
 
 static const uint16_t analysis_reordering_period(1 << (6+4));
 static const uint16_t analysis_staging_period(1 << 12);
@@ -31,11 +31,12 @@ using avalue_t = uint32_t;   // bits(avalue_t) >= log(reorder_period * sampling_
 
 using entry_index_t = ptrdiff_t;
 using entry_pair_t  = std::pair<entry_t, entry_t>;
-using window_hist_t = std::array<avalue_t, max_fpdist_ind>; // CHeck!
+using window_hist_t = std::array<avalue_t, max_fpdist_ind>;
 
 template <class T> using entry_set_t = std::unordered_set<T>;
 template <class T> using entry_vec_t = std::vector<T>;
 template <class T> using decay_map_t = std::unordered_map<T, std::pair<bool, uint32_t>>;
+template <class T> using freq_map_t  = std::unordered_map<T, window_hist_t>;
 
 /*
   Struct: affinity_pair_t
@@ -123,8 +124,12 @@ class Analysis {
   void remove_entry(entry_index_t entry_index);
 
   std::vector<layout_t> getLayouts();
+  void rerder_stage();
 
  private:
+  template<class T, class D>
+  friend class Tracer;
+
   // Verbosity information
   static std::ostream& err;
   bool DEBUG = false;
@@ -147,8 +152,8 @@ class Analysis {
 
   // Affinity information
   std::map<entry_t, window_t> window_list;
-  std::unordered_map<entry_t, window_hist_t> singlFreq;
-  std::unordered_map<entry_pair_t, window_hist_t> jointFreq;
+  freq_map_t<entry_pair_t> jointFreq;
+  freq_map_t<entry_t> singlFreq;
 
   // Layout information
   std::unordered_map<entry_t, layout_t*> layout_map;

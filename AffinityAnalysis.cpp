@@ -41,6 +41,16 @@ Analysis::Analysis() {
     pairings. Still remove form <analysis_set> though; maybe.
 */
 void Analysis::remove_entry(entry_index_t entry_index) {
+  /*
+  entry_t entry(entry_index);
+
+  for(auto w = singlFreq.begin(); w != singlFreq.end();) {
+    auto entry_a = w->first;
+
+    if(entry_a = entry)
+      w = singlFreq.erase(w);
+  }
+  */
   remove_set.emplace(entry_index);
 }
 
@@ -60,9 +70,35 @@ void Analysis::modify_entries(std::vector<std::pair<entry_index_t, entry_index_t
   }
 }
 */
+/*
+void new_ids(std::unordered_map<entry_t, entry_t> mapping) {
+  for(auto& entry : jointFreq) {
+      auto& a = entry.first.first;
+      auto& b = entry.first.second;
+
+      if(mapping.find(a) != mapping.end())
+        a = mapping.find(a);
+
+      if(mapping.find(b) != mapping.end())
+        b = mapping.find(b);
+  }
+
+  for(auto& entry : singlFreq) {
+    auto& a = entry.first;
+
+    if(mapping.find(a) != mapping.end())
+      a = mapping.find(a);
+  }
+}
+*/
 
 std::vector<layout_t> Analysis::getLayouts() {
   std::vector<layout_t> layouts;
+
+  // Clear frequency information.
+  // TODO: move back to transition_stage().
+  singlFreq.clear();
+  jointFreq.clear();
 
   for (auto layout_pair : layout_map)
     if (!layout_pair.second->dumped) {
@@ -131,14 +167,18 @@ void Analysis::transition_stage() {
       analysis_set.clear();
       window_list.clear();
 
-      // Enter a reorder stage every 256 trace stages
-      // log(2 ^ 5 * 2 ^ 11) == 16
       if (trace_stage_count++ % analysis_reordering_period == 0) {
         reorder_stage();
 
+        if (DEBUG) {
+          err << "Exiting reordering phase\n";
+          err.flush();
+        }
+
         // Clear frequency information.
-        singlFreq.clear();
-        jointFreq.clear();
+        // Moved to getLayouts() temporarily
+        // singlFreq.clear();
+        // jointFreq.clear();
       }
 
       // TODO: Change analysis_set to new ids. and manage reordering stages.
@@ -246,20 +286,35 @@ std::vector<affinity_pair_t> Analysis::get_affinity_pairs() {
 
     avalue_t affinity = 0;
 
-    for(wsize_t w_ind = 0; w_ind < max_fpdist_ind; w_ind += 1) {
-      if(window_hist[w_ind] != 0) {
-        if(std::max(singlFreq[entry_pair.first][w_ind], singlFreq[entry_pair.second][w_ind]) == 0)
+    for (wsize_t w_ind = 0; w_ind < max_fpdist_ind; w_ind += 1) {
+      if (window_hist[w_ind] != 0) {
+        if (std::max(singlFreq[entry_pair.first][w_ind], singlFreq[entry_pair.second][w_ind]) == 0)
           std::cout << "OVERFLOW!\n";
-        affinity += ((max_fpdist_ind - w_ind) * window_hist[w_ind]) /
-          std::max(singlFreq[entry_pair.first][w_ind], singlFreq[entry_pair.second][w_ind]);
+
+        avalue_t weight = (max_fpdist_ind - w_ind);
+        float p = (float)window_hist[w_ind] /
+          (float)std::max(singlFreq[entry_pair.first][w_ind], singlFreq[entry_pair.second][w_ind]);
+
+        affinity += (avalue_t)(p * weight);
       }
     }
 
-    if(affinity > 0)
+    if (affinity > 0)
       all_affinity_pairs.emplace_back(entry_pair.first, entry_pair.second, affinity);
   }
 
-  //remove_set.clear();
+  if (DEBUG) {
+    std::sort(all_affinity_pairs.begin(), all_affinity_pairs.end());
+    std::reverse(all_affinity_pairs.begin(), all_affinity_pairs.end());
+
+    err << "Printing affinity pairs:\n";
+    for (auto &pair : all_affinity_pairs)
+      err << pair << " ";
+
+    err.flush();
+  }
+
+   remove_set.clear();
 
   return all_affinity_pairs;
 }
@@ -277,29 +332,26 @@ void Analysis::add_compress_update(const entry_t& entry, bool analysis) {
 
   // decay_map[entry] = std::make_pair(true, 0);
 
-  for(auto e = window_list.begin(); e != window_list.end();) {
-    auto &owner  = e->first;
-    auto &window = e->second;
+  for(auto w = window_list.begin(); w != window_list.end();) {
+    auto &owner  = w->first;
+    auto &window = w->second;
 
     // Don't add to window that starts with same entry.
     if(owner == entry) {
-      ++e;
+      ++w;
       continue;
     }
 
-    // Update window size.
     window.length += 1;
     wsize_t window_ind = log2_ceil(window.length);
 
-    // Update frequency information.
     singlFreq[entry][window_ind] += 1;
     jointFreq[entry_pair_t(entry, owner)][window_ind] += 1;
 
-    // If e's window exceeds the max remove element from window analysis.
     if(window.length == max_fpdist + 1) {
-      e = window_list.erase(e);
+      w = window_list.erase(w);
     } else {
-      ++e;
+      ++w;
     }
   }
 }

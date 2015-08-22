@@ -50,6 +50,46 @@ class Tracer {
     return f_layout;
   }
 
+  void print_affinity_info() { }
+/*
+  void print_frequency_info() {
+    std::unordered_map<entry_t, std::unordered_map<entry_t, window_hist_t>> hist;
+
+    for (const auto& wcount_pair : analyzer.jointFreq) {
+      const auto& entry_pair = wcount_pair.first;
+      const auto& window_hist = wcount_pair.second;
+
+      // Gather jointFreq information for sampled entries
+      if (analyzer.analysis_set.find(entry_pair.first) != analyzer.analysis_set.end()) {
+        for(wsize_t w_ind = 0; w_ind < max_fpdist_ind; w_ind += 1)
+          hist[entry_pair.first][entry_pair.second][w_ind] += window_hist[w_ind];
+      } else {
+        for(wsize_t w_ind = 0; w_ind < max_fpdist_ind; w_ind += 1)
+          hist[entry_pair.second][entry_pair.first][w_ind] += window_hist[w_ind];
+      }
+    }
+
+    for (const auto& sampled_entry : hist) {
+      const auto& first_entry = sampled_entry.first;
+      const auto& freq_info = sampled_entry.second;
+
+      std::cout << "\n――――――――――――――――――――――――――――――――\n";
+
+      // Print single freq information for first_entry
+
+      // One tab before entry name, two before jointFreq
+      for (const auto &other_entry : freq_info) {
+        const auto& second_entry = other_entry.first;
+        const auto& entry_hist = other_entry.second;
+
+        // Print joint freq information for <first_entry, second_entry>
+
+      }
+
+      std::cout << "\n――――――――――――――――――――――――――――――――\n";
+    }
+  }
+*/
  private:
   T const* const root;
   Analysis analyzer;
