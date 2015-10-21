@@ -143,38 +143,17 @@ class AhMap {
       return std::get<1>(entry->value);
 
     } else {
-      std::cout << "\nFailed to find! " << hash % num_bins << "\n";
-
-      for (auto i = 0; i < last_entry; ++i)
-        if (equa_fn(std::get<0>(entries[i].value), key)) {
-          std::cout << "found!\n";
-
-          for (auto u = 0; u < num_bins; ++u) {
-            entry = bins[u];
-
-            while (entry != nullptr && !equa_fn(std::get<0>(entry->value), key))
-              entry = entry->next;
-
-            if (entry != nullptr) {
-              std::cout << "It's in a different bin!\n";
-              exit(0);
-            }
-
-          }
-          std::cout << "it isn't in a bin!\n";
-          return std::get<1>(entries[i].value);
-        }
-
       return insert(key, V());
+
     }
   }
 
   inline void ah_bin_remove(ah_entry* entry) { /* ... */ }
 
+  // Second should never be invalid.
+  // If first is invalid then it's on the free list.
   inline void ah_bin_swap(ah_entry* first, ah_entry* second) {
     if (first == second) return;
-
-    std::cout << "\n----- START -----\n";
 
     ah_entry **first_ls_start, **second_ls_start;
 
@@ -189,37 +168,24 @@ class AhMap {
     ah_entry* first_ls = *first_ls_start;
     ah_entry* second_ls = *second_ls_start;
 
-    unsigned f_l_count = 0, s_l_count = 0;
-    // Search through both bins and find the previous entry.
     bool first_head = false, second_head = false;
 
+    // Search through both bins and find the previous entry.
+
     if (first_ls != first && first_ls != nullptr) {
-      while (first_ls->next != first && first_ls->next != nullptr) {
+      while (first_ls->next != first && first_ls->next != nullptr)
         first_ls = first_ls->next;
-        ++f_l_count;
-      }
+
     } else {
       first_head = true;
     }
 
     if (second_ls != second && second_ls != nullptr) {
-      while (second_ls->next != second && second_ls->next != nullptr) {
+      while (second_ls->next != second && second_ls->next != nullptr)
         second_ls = second_ls->next;
-        ++s_l_count;
-      }
+
     } else {
       second_head = true;
-    }
-
-    // Check to see if first or second is in the free list.
-
-    if (first_ls != second_ls && first_ls->next == second_ls->next && first_ls->next != nullptr) {
-      std::cout << "what?!\n";
-      std::cout << "first : " << first << " value: " << std::get<0>(first->value) << "\n";
-      std::cout << "second: " << second << " value: " << std::get<0>(second->value)<< "\n";
-      std::cout << "first_ls : " << first_ls << " value: " << std::get<0>(first_ls->value)<< "\n";
-      std::cout << "second_ls: " << second_ls << " value: " << std::get<0>(second_ls->value)<< "\n";
-      exit(0);
     }
 
     if (first_head) {
@@ -233,133 +199,12 @@ class AhMap {
     } else {
       second_ls->next = first;
     }
-/*
-    if (first_ls->next == first) {
-      std::cout << "1: rewrite list";
-      first_ls->next = second;
-    } else if (*first_ls_start == first) {
-      std::cout << "1: rewrite head";
-      *first_ls_start = second;
-    } else {
-      std::cout << "\n\nError! Invalid first entry!\n\n";
-      exit(0);
-    }
-
-    if (second_ls->next == second) {
-      std::cout << " 2: rewrite list\n";
-      second_ls->next = first;
-    } else if (*second_ls_start == second) {
-      std::cout << " 2: rewrite head\n";
-      *second_ls_start = first;
-    } else {
-      std::cout << "\n\nError! Invalid second entry!\n\n";
-      exit(0);
-    }
-  */
-
-    auto f_ptr = first;
-    auto s_ptr = second;
-    auto f_next_temp = first->next;
-    auto s_next_temp = second->next;
-
-    if (second_ls->next != first && *second_ls_start != first)
-      std::cout << "!Second! Incorrect list entry!\n";
-
-    if (first_ls->next != second && *first_ls_start != second)
-      std::cout << "!First! Incorrect list entry!\n";
-
-    std::cout << "----- PRE-SWAP -----\n";
-
-    std::cout << "first_ls_start: " << *first_ls_start << "\n";
-    std::cout << "second_ls_start: " << *second_ls_start << "\n";
-
-
-    std::cout << "first: " << f_ptr << " new first: " << first << " old next: " << f_next_temp << " new next: " << first->next << "\n";
-    std::cout << "second: " << s_ptr << " new second: " << second << " old next: " << s_next_temp << " new next: " << second->next << "\n";
-
-    std::cout << "First_ls: " << first_ls << " next: " << first_ls->next << "\n";
-    std::cout << "Second_ls: " << second_ls << " next: " << second_ls->next << "\n";
 
     std::swap(*first, *second);
-
-    std::cout << "----- POST-SWAP -----\n";
-
-    std::cout << "First_ls: " << first_ls << " next: " << first_ls->next << "\n";
-    std::cout << "Second_ls: " << second_ls << " next: " << second_ls->next << "\n";
-
-    std::cout << "first: " << f_ptr << " new first: " << first << " old next: " << f_next_temp << " new next: " << first->next << "\n";
-    std::cout << "second: " << s_ptr << " new second: " << second << " old next: " << s_next_temp << " new next: " << second->next << "\n";
-
-    // Check for errors
-    first_ls  = *first_ls_start;
-    second_ls = *second_ls_start;
-
-    // Search through both bins and find the previous entry.
-
-    if (first_ls != second && first_ls != nullptr)
-      while (first_ls->next != second && first_ls->next != nullptr) {
-        first_ls = first_ls->next;
-        --f_l_count;
-      }
-
-    if (second_ls != first && second_ls != nullptr)
-      while (second_ls->next != first && second_ls->next != nullptr) {
-        second_ls = second_ls->next;
-        --s_l_count;
-      }
-
-    if (first_ls->next == nullptr && *first_ls_start != second) {
-      std::cout << "Error! First no longer in list!\n";
-      exit(0);
-    }
-
-    if (f_l_count) {
-      std::cout << "Error! First list lost an element! " << f_l_count << "\n";
-      exit(0);
-    }
-
-    if (second_ls->next == nullptr && *second_ls_start != first) {
-      std::cout << "Error! Second no longer in list!\n";
-      exit(0);
-    }
-
-    if (s_l_count) {
-      std::cout << "Error! Second list lost an element! " << s_l_count << "\n";
-      exit(0);
-    }
-
-    /*
-    if (second->next != f_next_temp) {
-      std::cout << "Second! Incorrect copy!\n";
-      exit(0);
-    }
-
-    if (second_ls->next != first && *second_ls_start != first) {
-      std::cout << "Second! Incorrect list entry!\n";
-      exit(0);
-    }
-
-    if (first->next != s_next_temp) {
-      std::cout << first->next <<  ", " << s_next_temp << "First! Incorrect copy!\n";
-      exit(0);
-    }
-
-    if (first_ls->next != second && *first_ls_start != second) {
-      std::cout << "First! Incorrect list entry!\n";
-      exit(0);
-    }
-    */
-
-
-
-    std::cout << "----- END -----\n";
-    //first->next = first_temp;
-    //second->next = second_temp;
   }
 
   void reorder() {
     auto new_ordering = trace.results();
-    //std::unordered_map<entry_t, entry_t> remapping;
 
     // Check for duplicates.
     std::unordered_set<entry_t> dups;
@@ -385,11 +230,6 @@ class AhMap {
       }
     }
 
-    std::cout << "Starting re ordering phase!\n";
-    std::cout << "――――――――――――――――――――――――――――――――\n";
-
-    std::cout << "total_capacity: " << total_capacity << "\n";
-
     // r: current_position -> original_position
     // r_i: original_position -> current_position
     std::unordered_map<entry_t, entry_t> r, r_i;
@@ -403,7 +243,6 @@ class AhMap {
           exit(0);
         }
 
-        std::cout << "r[new_ordering[i]] ";
         ah_bin_swap(&entries[i], &entries[r[new_ordering[i]]]);
 
         // If i isn't the original value of the position
@@ -423,7 +262,6 @@ class AhMap {
           exit(0);
         }
 
-        std::cout << "new_ordering[i] ";
         ah_bin_swap(&entries[i], &entries[new_ordering[i]]);
 
         if (r_i.find(i) != r_i.end()) {
@@ -435,15 +273,7 @@ class AhMap {
           r_i[new_ordering[i]] = i;
         }
       }
-
-      std::cout << "(" << i << ", " << new_ordering[i] << "), ";
-
-      // Mark reordering for analyzer.
-      // remapping.insert(i, new_ordering[i]);
-      // remapping.insert(new_ordering[i], i);
     }
-
-    // std::cout << "---------\n";
   }
 
   void ah_expand_table() {

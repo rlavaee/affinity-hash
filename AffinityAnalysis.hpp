@@ -16,9 +16,9 @@
 #include <iostream>
 
 /** Globals **/
-static const uint16_t max_fpdist(1 << 8);
-static const uint16_t max_fpdist_ind(8);
-static const uint16_t analysis_set_size(3);
+static const uint16_t max_fpdist(1 << 4);
+static const uint16_t max_fpdist_ind(4);
+static const uint16_t analysis_set_size(4);
 
 static const uint16_t analysis_reordering_period(1 << (6+4));
 static const uint16_t analysis_staging_period(1 << 12);
